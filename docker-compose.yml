@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sales-agent-postgres
+    environment:
+      POSTGRES_DB: sales_agent_demo
+      POSTGRES_USER: sales_agent
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sales_agent_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - sales_agent_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sales_agent -d sales_agent_demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sales-agent-net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sales-agent-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - sales-agent-net
+    depends_on:
+      - postgres
+
+volumes:
+  sales_agent_data:
+  pgadmin_data:
+
+networks:
+  sales-agent-net:
+    driver: bridge
