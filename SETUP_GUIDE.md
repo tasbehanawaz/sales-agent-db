@@ -1,6 +1,6 @@
 # Setup Guide & Data Model
 
-Detailed information about the database setup, data model, and implementation.
+Detailed information about the MSSQL database setup, data model, and implementation.
 
 ---
 
@@ -15,32 +15,44 @@ Detailed information about the database setup, data model, and implementation.
 
 ## Database Connection
 
-### Via CLI (psql)
+### Local Development (sqlcmd CLI)
+
 ```
 Host: localhost
-Port: 5433
+Port: 1433
 Database: sales_agent_demo
-User: sales_agent
-Password: sales_agent_password (from .env)
+User: sa
+Password: Sales@Agent123
 
 # Connect:
-psql -h localhost -p 5433 -U sales_agent -d sales_agent_demo
+docker exec -it sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo
 ```
 
-### Via pgAdmin Web UI
-```
-Browser: http://localhost:5050
-Login: admin@example.com / admin
+### Token Bazaar Server (Remote)
 
-Server Connection:
-  - Host: sales-agent-postgres (Docker container name)
-  - Port: 5432 (internal Docker port)
-  - Database: sales_agent_demo
-  - User: sales_agent
-  - Password: sales_agent_password
+```
+Host: 35.240.218.50
+Port: 1433
+Database: sales_agent_demo
+User: sa
+Password: Sales@Agent123
+
+# Connect:
+docker exec -it sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S 35.240.218.50,1433 -U sa -P "Sales@Agent123" -d sales_agent_demo
 ```
 
-**⚠️ Important**: Use `sales-agent-postgres` (container name), NOT `localhost`
+### Via GUI Tools
+
+**Supported**: Azure Data Studio, VS Code MSSQL Extension, SQL Server Management Studio
+
+Connection details (same for local/remote, just change host):
+- Server: localhost (local) or 35.240.218.50 (Token Bazaar)
+- Port: 1433
+- Authentication: SQL Login
+- Username: sa
+- Password: Sales@Agent123
+- Database: sales_agent_demo
+- Trust certificate: ✅
 
 ---
 
@@ -51,10 +63,12 @@ Server Connection:
 #### **sales_reps** (50 records)
 - `rep_id` (UUID primary key)
 - `name`, `territory`, `region`
-- `manager_id` (FK to sales_reps, nullable)
+- `manager_id` (FK to sales_reps, nullable for top-level managers)
 - `created_at`, `updated_at`
 
-**Indexes**: region, territory
+**Indexes**: region, territory, manager_id
+
+**Hierarchy**: 5 managers + 45 reps (realistic sales organization structure)
 
 #### **products** (15 records)
 - `product_id` (UUID primary key)
@@ -67,20 +81,24 @@ Server Connection:
 - `pharmacy_id` (UUID primary key)
 - `name`, `region`, `channel`
 
+**Channels**: Retail, Hospital, Clinic
+
 ### Fact Tables
 
 #### **doctors** (300 records)
 - `doctor_id`, `doctor_name`, `specialty`
 - `tier` (A/B/C), `hospital_clinic`, `region`, `territory`, `city`, `market`
-- `onboarded_date`, `status`
+- `onboarded_date`, `status` (active/inactive)
 
 **Indexes**: region, territory, tier, status
 
 **Tier Distribution**: A=33%, B=33%, C=34% (realistic distribution)
 
+**Specialties**: Cardiology, Oncology, Neurology, Endocrinology, Psychiatry, General Practice
+
 #### **call_planning** (31,322 records)
 - `call_id`, `doctor_id` (FK), `rep_id` (FK), `product_id` (FK)
-- `planned_date`, `actual_call_date` (nullable)
+- `planned_date`, `actual_call_date` (nullable if call wasn't executed)
 - `call_type`, `frequency_target`, `call_status`, `feedback_score` (1-10, nullable)
 
 **Execution Rate**: 78.03% (actual_call_date filled in when executed)
@@ -109,11 +127,11 @@ Server Connection:
 
 3. **vw_call_effectiveness**
    - Call success metrics by doctor tier
-   - Columns: tier, region, market, month, total_calls, completed_calls, adherence_pct, avg_feedback, sales_value_post_call
+   - Columns: tier, region, month, total_calls, completed_calls, adherence_pct, avg_feedback, sales_value_post_call
 
 4. **vw_inactive_doctors**
    - Doctors not called in 30/60/90+ days
-   - Columns: doctor_id, doctor_name, specialty, tier, region, last_call_date, days_since_last_call, total_calls_made
+   - Columns: doctor_id, doctor_name, specialty, tier, region, days_since_last_call, total_calls_made
 
 5. **vw_at_risk_territories**
    - Territories with declining sales or low adherence
@@ -173,46 +191,45 @@ Server Connection:
 
 ## Implementation Notes
 
-### What Changed from Original Plan
+### PostgreSQL → MSSQL Migration
 
-1. **pgAdmin Added**
-   - Web-based database UI for easier data exploration
-   - Accessible at http://localhost:5050
-   - No CLI knowledge required
+1. **Database Engine Switched**
+   - From PostgreSQL 16 to SQL Server 2022 Express
+   - Aligned with enterprise requirements
 
-2. **Seed Script Optimized**
-   - Fixed memory issues during large data generation
-   - Added batching (5,000 records per commit) for secondary_sales
-   - Original: single batch insert → Postgres memory crash
-   - Now: incremental commits prevent OOM errors
+2. **Schema Converted**
+   - PostgreSQL plpgsql → T-SQL
+   - UUID types → T-SQL UNIQUEIDENTIFIER with NEWID()
+   - TIMESTAMP → DATETIME
+   - Syntax updates (CREATE VIEW, constraints, indexes)
 
-3. **Foreign Key Handling**
-   - Manager hierarchy improved for sales_reps
-   - First creates 5 managers without manager references
-   - Then creates 45 reps with valid manager_id references
-   - Avoids self-referential FK constraint violations
+3. **Seed Script Refactored**
+   - psycopg2 → pyodbc (MSSQL connector)
+   - Same 360k+ records, same patterns
+   - Batch processing preserved (5,000 records per commit)
+   - macOS ODBC driver limitation handled
 
-4. **Docker Compose Simplified**
-   - Removed obsolete `version` field
-   - Eliminates deprecation warning
-   - Modern Compose (v2+) doesn't require version
+4. **Data Fidelity Maintained**
+   - Same schema structure
+   - Same data volumes
+   - Same realistic patterns (seasonality, trends, tier distribution)
+   - Same 3-year historical span
 
 ### Known Limitations
 
-- **Local Docker only**: For Vertx to reach this DB:
+- **Local Docker only (for now)**: For Vertx to reach this DB:
   - On same machine (local dev)
   - Or exposed via ngrok/tunnel (testing)
-  - Or deployed to cloud Postgres (production)
+  - Or deployed to cloud (Token Bazaar: 35.240.218.50)
 
 - **Dummy data only**: 3 years of synthetic data, not real sales data
   - Sufficient for MVP + Phase 1 demos
   - Real data integration comes in Phase 2
 
-- **No built-in backups**: Recommended before major changes:
-  ```bash
-  docker exec sales-agent-postgres pg_dump -U sales_agent \
-    -d sales_agent_demo > backup.sql
-  ```
+- **ODBC driver on macOS**: Seeding requires either:
+  - Running inside Docker container
+  - Or deploying to server with ODBC drivers installed
+  - Or using cloud SQL Server instance
 
 ---
 
@@ -222,11 +239,12 @@ Server Connection:
 
 ```sql
 -- Create read-only user for Vertx connector
-CREATE USER vertx_reader WITH PASSWORD 'secure_password';
-GRANT CONNECT ON DATABASE sales_agent_demo TO vertx_reader;
-GRANT USAGE ON SCHEMA public TO vertx_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO vertx_reader;
-GRANT SELECT ON ALL VIEWS IN SCHEMA public TO vertx_reader;
+CREATE LOGIN vertx_reader WITH PASSWORD = 'secure_password';
+CREATE USER vertx_reader FOR LOGIN vertx_reader;
+
+-- Grant read-only permissions
+GRANT SELECT ON ALL TABLES IN DATABASE sales_agent_demo TO vertx_reader;
+GRANT SELECT ON ALL VIEWS IN DATABASE sales_agent_demo TO vertx_reader;
 
 -- Use these credentials in Vertx instead of admin
 ```
@@ -237,7 +255,7 @@ GRANT SELECT ON ALL VIEWS IN SCHEMA public TO vertx_reader;
 - ✅ Parameterized queries (avoid SQL injection)
 - ✅ Set connection timeout (avoid hanging queries)
 - ✅ Enable SSL/TLS for cloud connections
-- ✅ Add response limits (LIMIT clause in queries)
+- ✅ Add response limits (TOP clause in queries)
 - ✅ Never commit .env file with real passwords
 - ❌ Don't use admin credentials for agent connections
 - ❌ Don't expose database password in Vertx code
@@ -245,41 +263,34 @@ GRANT SELECT ON ALL VIEWS IN SCHEMA public TO vertx_reader;
 
 ---
 
-## Backup & Restore
+## Deployment Checklist
 
-### Export Database
+### Local Development
+- [ ] Docker & Docker Compose running
+- [ ] `docker compose up -d` starts MSSQL
+- [ ] Database created & schema applied
+- [ ] Seed script runs successfully (360k+ records)
+- [ ] All 7 tables exist with data
+- [ ] All 6 views exist and queryable
+- [ ] Connection via sqlcmd/VS Code/Azure Data Studio works
 
-```bash
-# Full dump
-docker exec sales-agent-postgres pg_dump -U sales_agent \
-  -d sales_agent_demo > backup.sql
-
-# Specific table
-docker exec sales-agent-postgres pg_dump -U sales_agent \
-  -d sales_agent_demo -t secondary_sales > sales_backup.sql
-
-# CSV export
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "COPY secondary_sales TO STDOUT WITH CSV HEADER;" > sales.csv
-```
-
-### Restore from Backup
-
-```bash
-# Full restore
-cat backup.sql | docker exec -i sales-agent-postgres psql -U sales_agent -d sales_agent_demo
-
-# Single table restore
-cat sales_backup.sql | docker exec -i sales-agent-postgres psql -U sales_agent -d sales_agent_demo
-```
+### Token Bazaar Server (35.240.218.50)
+- [ ] Docker & Docker Compose running on server
+- [ ] Port 1433 open on firewall
+- [ ] `docker compose up -d` starts MSSQL
+- [ ] Database created & schema applied
+- [ ] Seed script runs successfully
+- [ ] All tables/views verified
+- [ ] Connection from Vertx platform tested
 
 ---
 
 ## Next Steps
 
-1. ✅ Database running & seeded
+1. ✅ Database running & seeded (local or Token Bazaar)
 2. ⏭️ See [COMMANDS.md](COMMANDS.md) for operational commands
-3. ⏭️ See [VERTX_INTEGRATION.md](VERTX_INTEGRATION.md) for Vertx setup
+3. ⏭️ Connect API layer to MSSQL (Node + Express)
+4. ⏭️ Expose via Vertx integration
 
 ---
 

@@ -1,29 +1,39 @@
-
-
-
 # Command Reference
 
-Comprehensive command reference organized by category.
+Comprehensive command reference for MSSQL database operations (local & Token Bazaar server).
 
 ---
 
 ## 🚀 Startup & Initialization
 
+### Local Development
+
 ```bash
 # Start fresh (create containers, schema, seed data)
 docker compose up -d
-sleep 15
+sleep 30
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "CREATE DATABASE [sales_agent_demo]"
 source venv/bin/activate
-python init/03_seed_data.py
-
-# Or all-in-one:
-docker compose up -d && sleep 15 && source venv/bin/activate && python init/03_seed_data.py
+pip install -r requirements.txt
+python init/mssql/03_seed_data.py
 
 # Start existing containers
 docker compose up -d
 
 # Check status
 docker compose ps
+```
+
+### Token Bazaar Server Deployment
+
+```bash
+# On Token Bazaar server (35.240.218.50)
+docker compose up -d
+sleep 30
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "CREATE DATABASE [sales_agent_demo]"
+
+# Then seed data (may require ODBC drivers or running inside container)
+python init/mssql/03_seed_data.py
 ```
 
 ---
@@ -35,12 +45,11 @@ docker compose ps
 docker compose ps
 
 # View logs in real-time
-docker compose logs -f postgres        # Postgres logs
-docker compose logs -f pgadmin         # pgAdmin logs
+docker compose logs -f mssql           # MSSQL logs
 docker compose logs -f                 # All logs
 
 # View specific number of lines
-docker compose logs --tail=50 postgres
+docker compose logs --tail=50 mssql
 
 # Stop containers (keep data)
 docker compose down
@@ -54,84 +63,55 @@ docker compose restart
 # Rebuild containers (after docker-compose.yml changes)
 docker compose up -d --build
 
-# Remove single container
-docker compose rm postgres -v
+# Remove MSSQL container
+docker compose rm mssql -v
 ```
 
 ---
 
 ## 🗄️ Database Access
 
-### Interactive psql CLI
+### Local (via sqlcmd CLI)
 
 ```bash
 # Connect interactively
-docker exec -it sales-agent-postgres psql -U sales_agent -d sales_agent_demo
+docker exec -it sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo
 
-# Inside psql
-\dt                    # List tables
-\dv                    # List views
-\d table_name          # Show table structure
-\du                    # List users
-SELECT version();      # Show Postgres version
-\q                     # Exit
+# Inside sqlcmd
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo';
+SELECT * FROM doctors LIMIT 5;
+GO
+exit
 ```
+
+### Remote Token Bazaar Server (via sqlcmd)
+
+```bash
+# Connect to Token Bazaar MSSQL
+docker exec -it sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S 35.240.218.50,1433 -U sa -P "Sales@Agent123" -d sales_agent_demo
+```
+
+### Via GUI (Azure Data Studio / VS Code MSSQL Extension)
+
+**Server**: localhost (local) or 35.240.218.50 (Token Bazaar)  
+**Port**: 1433  
+**Username**: sa  
+**Password**: Sales@Agent123  
+**Database**: sales_agent_demo  
+**Trust cert**: ✅
 
 ### Single Queries
 
 ```bash
-# Run query without entering psql
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT * FROM doctors LIMIT 5;"
+# Run query without entering sqlcmd
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT COUNT(*) as doctor_count FROM dbo.doctors;"
 
 # Multiple statements
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT COUNT(*) as doctors FROM doctors; 
-   SELECT COUNT(*) as calls FROM call_planning;"
-
-# Format output as CSV
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT * FROM doctors LIMIT 10;" --csv
-
-# Format as aligned table
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT * FROM doctors LIMIT 10;" --table
-```
-
-### Export Data
-
-```bash
-# Export to CSV
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "COPY doctors TO STDOUT WITH CSV HEADER;" > doctors_export.csv
-
-# Export entire table
-docker exec sales-agent-postgres pg_dump -U sales_agent -d sales_agent_demo \
-  -t doctors --data-only -a > doctors_data.sql
-
-# Export schema only
-docker exec sales-agent-postgres pg_dump -U sales_agent -d sales_agent_demo \
-  -t doctors --schema-only > doctors_schema.sql
-```
-
-### Database Info
-
-```bash
-# Get database size
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT pg_size_pretty(pg_database_size('sales_agent_demo'));"
-
-# List all tables with row counts
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT schemaname, tablename, n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;"
-
-# List all views
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT viewname FROM pg_views WHERE schemaname='public';"
-
-# Check active connections
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT usename, application_name, state FROM pg_stat_activity WHERE datname='sales_agent_demo';"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT COUNT(*) as doctors FROM dbo.doctors;
+SELECT COUNT(*) as calls FROM dbo.call_planning;
+GO
+"
 ```
 
 ---
@@ -140,39 +120,62 @@ docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
 
 ```bash
 # Count all records
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT 'doctors', COUNT(*) FROM doctors
-   UNION ALL SELECT 'call_planning', COUNT(*) FROM call_planning
-   UNION ALL SELECT 'secondary_sales', COUNT(*) FROM secondary_sales
-   UNION ALL SELECT 'sales_reps', COUNT(*) FROM sales_reps
-   UNION ALL SELECT 'products', COUNT(*) FROM products
-   UNION ALL SELECT 'pharmacies', COUNT(*) FROM pharmacies;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT 'doctors', COUNT(*) FROM dbo.doctors
+UNION ALL SELECT 'call_planning', COUNT(*) FROM dbo.call_planning
+UNION ALL SELECT 'secondary_sales', COUNT(*) FROM dbo.secondary_sales
+UNION ALL SELECT 'sales_reps', COUNT(*) FROM dbo.sales_reps
+UNION ALL SELECT 'products', COUNT(*) FROM dbo.products
+UNION ALL SELECT 'pharmacies', COUNT(*) FROM dbo.pharmacies
+UNION ALL SELECT 'audit_log', COUNT(*) FROM dbo.audit_log;
+GO
+"
 
 # Check date ranges
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT 'call_planning' as source, MIN(planned_date), MAX(planned_date)
-   UNION ALL
-   SELECT 'secondary_sales', MIN(sale_date), MAX(sale_date)
-   FROM secondary_sales;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT 'call_planning' as source, MIN(CAST(planned_date AS DATE)), MAX(CAST(planned_date AS DATE))
+UNION ALL SELECT 'secondary_sales', MIN(CAST(sale_date AS DATE)), MAX(CAST(sale_date AS DATE))
+FROM dbo.secondary_sales;
+GO
+"
 
 # Verify call adherence
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT ROUND(100.0 * COUNT(CASE WHEN actual_call_date IS NOT NULL THEN 1 END) / 
-    COUNT(*), 2) as adherence_pct FROM call_planning;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT ROUND(100.0 * COUNT(CASE WHEN actual_call_date IS NOT NULL THEN 1 END) / COUNT(*), 2) as adherence_pct 
+FROM dbo.call_planning;
+GO
+"
 
 # Sales by region
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT region, COUNT(*) as transactions, 
-    ROUND(SUM(value_sold)::NUMERIC, 2) as total_value
-   FROM secondary_sales GROUP BY region ORDER BY total_value DESC;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT region, COUNT(*) as transactions, ROUND(SUM(CAST(value_sold AS FLOAT)), 2) as total_value
+FROM dbo.secondary_sales GROUP BY region ORDER BY total_value DESC;
+GO
+"
 
 # Doctor tier distribution
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT tier, COUNT(*) as count FROM doctors GROUP BY tier ORDER BY tier;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT tier, COUNT(*) as count FROM dbo.doctors GROUP BY tier ORDER BY tier;
+GO
+"
 
 # Region distribution
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT region, COUNT(*) as doctors FROM doctors GROUP BY region ORDER BY doctors DESC;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT region, COUNT(*) as doctors FROM dbo.doctors GROUP BY region ORDER BY doctors DESC;
+GO
+"
+
+# List all tables
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME;
+GO
+"
+
+# List all views
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME;
+GO
+"
 ```
 
 ---
@@ -183,126 +186,99 @@ docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
 
 ```bash
 # Truncate all data (keep schema & views)
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "TRUNCATE secondary_sales, call_planning, doctors, pharmacies, 
-    products, sales_reps, audit_log CASCADE;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+TRUNCATE TABLE dbo.secondary_sales;
+TRUNCATE TABLE dbo.call_planning;
+TRUNCATE TABLE dbo.doctors;
+TRUNCATE TABLE dbo.pharmacies;
+TRUNCATE TABLE dbo.products;
+TRUNCATE TABLE dbo.sales_reps;
+TRUNCATE TABLE dbo.audit_log;
+GO
+"
 
 # Re-seed after truncate
 source venv/bin/activate
-python init/03_seed_data.py
+python init/mssql/03_seed_data.py
 
 # Full reset (schema + data + Docker volumes)
 docker compose down -v
 docker compose up -d
-sleep 15
+sleep 30
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "CREATE DATABASE [sales_agent_demo]"
 source venv/bin/activate
-python init/03_seed_data.py
+python init/mssql/03_seed_data.py
 ```
 
 ### Backup & Restore
 
 ```bash
-# Full database backup
-docker exec sales-agent-postgres pg_dump -U sales_agent -d sales_agent_demo > backup.sql
+# Full database backup (via sqlcmd)
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "
+BACKUP DATABASE [sales_agent_demo] TO DISK = '/var/opt/mssql/backup/sales_agent_demo.bak';
+GO
+"
 
-# Backup specific table
-docker exec sales-agent-postgres pg_dump -U sales_agent -d sales_agent_demo \
-  -t secondary_sales > sales_backup.sql
-
-# Backup without data (schema only)
-docker exec sales-agent-postgres pg_dump -U sales_agent -d sales_agent_demo \
-  --schema-only > schema_backup.sql
-
-# Restore full database
-cat backup.sql | docker exec -i sales-agent-postgres psql -U sales_agent -d sales_agent_demo
-
-# Restore specific table
-cat sales_backup.sql | docker exec -i sales-agent-postgres psql -U sales_agent -d sales_agent_demo
-
-# Restore with progress
-cat backup.sql | docker exec -i sales-agent-postgres psql -U sales_agent -d sales_agent_demo -v ON_ERROR_STOP=1
-```
-
-### View Statistics
-
-```bash
-# Index usage statistics
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT schemaname, tablename, indexname, idx_scan 
-   FROM pg_stat_user_indexes ORDER BY idx_scan DESC;"
-
-# Table size statistics
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT tablename, 
-    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
-   FROM pg_tables WHERE schemaname='public' ORDER BY 2 DESC;"
+# Restore from backup
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "
+RESTORE DATABASE [sales_agent_demo] FROM DISK = '/var/opt/mssql/backup/sales_agent_demo.bak';
+GO
+"
 ```
 
 ---
 
 ## 📋 Agent Query Examples
 
-### Run Sample Queries
-
-```bash
-# Connect to psql first
-docker exec -it sales-agent-postgres psql -U sales_agent -d sales_agent_demo
-```
-
 ### Top Performing Reps
 
 ```sql
-SELECT name, territory, region, total_sales, call_adherence_pct 
-FROM vw_rep_performance 
-WHERE month = '2025-12-01'
-ORDER BY total_sales DESC 
-LIMIT 5;
+SELECT TOP 5 name, territory, region, total_sales, call_adherence_pct 
+FROM dbo.vw_rep_performance 
+WHERE YEAR([month]) = 2025 AND MONTH([month]) = 12
+ORDER BY total_sales DESC;
 ```
 
 ### Product Sales Trends
 
 ```sql
-SELECT sku, brand, region, month, qty_sold, value_sold 
-FROM vw_product_region_trends 
-WHERE month >= DATE_TRUNC('month', CURRENT_DATE)::DATE - INTERVAL '3 months'
-ORDER BY month DESC, value_sold DESC;
+SELECT sku, brand, region, [month], qty_sold, value_sold 
+FROM dbo.vw_product_region_trends 
+WHERE [month] >= DATEADD(MONTH, -3, GETDATE())
+ORDER BY [month] DESC, value_sold DESC;
 ```
 
 ### Inactive Doctors (30+ days)
 
 ```sql
 SELECT doctor_name, specialty, tier, region, days_since_last_call, total_calls_made
-FROM vw_inactive_doctors 
+FROM dbo.vw_inactive_doctors 
 WHERE days_since_last_call >= 30 
-ORDER BY days_since_last_call DESC
-LIMIT 10;
+ORDER BY days_since_last_call DESC;
 ```
 
 ### At-Risk Territories
 
 ```sql
-SELECT name, territory, region, sales_trend_pct, call_adherence_pct 
-FROM vw_at_risk_territories 
-ORDER BY sales_trend_pct ASC
-LIMIT 10;
+SELECT TOP 10 name, territory, region, sales_trend_pct, call_adherence_pct 
+FROM dbo.vw_at_risk_territories 
+ORDER BY sales_trend_pct ASC;
 ```
 
 ### Call Effectiveness by Tier
 
 ```sql
-SELECT tier, region, month, total_calls, completed_calls, 
-  adherence_pct, avg_feedback, sales_value_post_call
-FROM vw_call_effectiveness 
-WHERE month >= DATE_TRUNC('month', CURRENT_DATE)::DATE - INTERVAL '6 months'
-ORDER BY month DESC, adherence_pct DESC;
+SELECT tier, region, [month], total_calls, completed_calls, adherence_pct, avg_feedback, sales_value_post_call
+FROM dbo.vw_call_effectiveness 
+WHERE [month] >= DATEADD(MONTH, -6, GETDATE())
+ORDER BY [month] DESC, adherence_pct DESC;
 ```
 
 ### Territory Coverage
 
 ```sql
-SELECT name, territory, region, total_doctors, 
-  tier_a_count, tier_b_count, tier_c_count, coverage_pct
-FROM vw_territory_coverage 
+SELECT name, territory, region, total_doctors, tier_a_count, tier_b_count, tier_c_count, coverage_pct
+FROM dbo.vw_territory_coverage 
 ORDER BY coverage_pct DESC;
 ```
 
@@ -312,32 +288,13 @@ ORDER BY coverage_pct DESC;
 SELECT r.name, r.territory, p.sku, p.brand,
   COUNT(*) as num_transactions,
   SUM(ss.quantity_sold) as total_qty,
-  ROUND(SUM(ss.value_sold)::NUMERIC, 2) as total_value
-FROM secondary_sales ss
-JOIN sales_reps r ON ss.rep_id = r.rep_id
-JOIN products p ON ss.product_id = p.product_id
-WHERE EXTRACT(YEAR FROM ss.sale_date) = 2025 
-  AND EXTRACT(MONTH FROM ss.sale_date) = 12
+  ROUND(SUM(CAST(ss.value_sold AS FLOAT)), 2) as total_value
+FROM dbo.secondary_sales ss
+JOIN dbo.sales_reps r ON ss.rep_id = r.rep_id
+JOIN dbo.products p ON ss.product_id = p.product_id
+WHERE YEAR(ss.sale_date) = 2025 AND MONTH(ss.sale_date) = 12
 GROUP BY r.rep_id, r.name, r.territory, p.product_id, p.sku, p.brand
 ORDER BY total_value DESC;
-```
-
-### Sales Forecast (Simple Trend)
-
-```sql
-WITH monthly_sales AS (
-  SELECT DATE_TRUNC('month', sale_date)::DATE as month, 
-    SUM(value_sold) as total_value
-  FROM secondary_sales
-  GROUP BY DATE_TRUNC('month', sale_date)
-)
-SELECT month, total_value, 
-  LAG(total_value) OVER (ORDER BY month) as prev_month,
-  ROUND(100.0 * (total_value - LAG(total_value) OVER (ORDER BY month)) / 
-    LAG(total_value) OVER (ORDER BY month), 2) as pct_change
-FROM monthly_sales
-WHERE month >= CURRENT_DATE - INTERVAL '12 months'
-ORDER BY month DESC;
 ```
 
 ---
@@ -371,26 +328,7 @@ du -sh sales-agent-db/
 docker volume ls | grep sales-agent
 
 # Inspect volume
-docker inspect sales-agent-db_sales_agent_data
-```
-
-### Connection Management
-
-```bash
-# View all active connections
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT pid, usename, application_name, state, query FROM pg_stat_activity 
-   WHERE datname='sales_agent_demo';"
-
-# Kill all connections (for reset/maintenance)
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
-   WHERE datname='sales_agent_demo' AND pid <> pg_backend_pid();"
-
-# Kill specific user connections
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity 
-   WHERE usename='sales_agent';"
+docker inspect sales-agent-db_mssql_data
 ```
 
 ---
@@ -409,33 +347,8 @@ nano .env
 docker compose down
 docker compose up -d
 
-# Test new credentials
-docker exec sales-agent-postgres psql -h sales-agent-postgres -U sales_agent \
-  -d sales_agent_demo -c "SELECT 1;"
-```
-
----
-
-## 🌐 pgAdmin Access
-
-```bash
-# Open in browser
-http://localhost:5050
-
-# Login
-# Email: admin@example.com
-# Password: admin
-
-# Add Database Server:
-# 1. Right-click "Servers" → Register → Server
-# 2. General Tab → Name: sales-agent-db
-# 3. Connection Tab → Fill in details:
-#    - Host: sales-agent-postgres
-#    - Port: 5432
-#    - Database: sales_agent_demo
-#    - Username: sales_agent
-#    - Password: sales_agent_password
-# 4. Save
+# Test connection (local)
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT 1;"
 ```
 
 ---
@@ -444,20 +357,26 @@ http://localhost:5050
 
 ```bash
 # Health check
-docker exec sales-agent-postgres pg_isready -U sales_agent -d sales_agent_demo
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "SELECT 1;" 2>&1 | grep -q "1" && echo "✓ Healthy" || echo "✗ Not responding"
 
 # Test all views exist
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT COUNT(*) as view_count FROM pg_views WHERE schemaname='public';"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT COUNT(*) as view_count FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='dbo';
+GO
+"
 
 # Verify all tables have data
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT tablename, n_live_tup FROM pg_stat_user_tables 
-   WHERE schemaname='public' AND n_live_tup = 0;"
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT t.TABLE_NAME, ROW_NUMBER() OVER (ORDER BY t.TABLE_NAME) as count
+FROM INFORMATION_SCHEMA.TABLES t WHERE t.TABLE_SCHEMA='dbo';
+GO
+"
 
-# Test a complex query (view)
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT COUNT(*) FROM vw_rep_performance WHERE month = '2025-12-01';"
+# Verify all indexes created
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT COUNT(*) as index_count FROM sys.indexes WHERE database_id = DB_ID() AND name IS NOT NULL;
+GO
+"
 ```
 
 ---
@@ -465,27 +384,34 @@ docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
 ## 📞 Troubleshooting Commands
 
 ```bash
-# Check if Postgres is running
-docker compose ps | grep postgres
+# Check if MSSQL is running
+docker compose ps | grep mssql
 
-# View Postgres error logs
-docker compose logs postgres | tail -50
+# View MSSQL error logs
+docker compose logs mssql | tail -50
 
-# Test network connectivity (container to container)
-docker exec sales-agent-postgres ping sales-agent-pgadmin
+# Check MSSQL version
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "SELECT @@VERSION;"
 
-# Check Postgres version
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c "SELECT version();"
+# Verify database exists
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "
+SELECT name FROM sys.databases WHERE name = 'sales_agent_demo';
+GO
+"
 
-# Verify all indexes created
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT schemaname, tablename, indexname FROM pg_indexes 
-   WHERE schemaname='public' ORDER BY tablename;"
+# Check foreign keys
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT CONSTRAINT_NAME, TABLE_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS 
+WHERE CONSTRAINT_TYPE='FOREIGN KEY' AND TABLE_SCHEMA='dbo';
+GO
+"
 
-# Check for missing foreign keys
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT constraint_name, table_name FROM information_schema.table_constraints 
-   WHERE constraint_type='FOREIGN KEY' AND table_schema='public';"
+# Check constraints
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "
+SELECT CONSTRAINT_NAME, TABLE_NAME, CONSTRAINT_TYPE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS 
+WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME;
+GO
+"
 ```
 
 ---
