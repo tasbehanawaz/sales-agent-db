@@ -1,0 +1,276 @@
+{
+  "info": {
+    "_postman_id": "sales-agent-api",
+    "name": "Sales Agent API",
+    "description": "Complete API collection for Sales Agent Database queries",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if API is running"
+          }
+        },
+        {
+          "name": "Database Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "stats"]
+            },
+            "description": "Get total record counts for all tables"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Core Tables",
+      "item": [
+        {
+          "name": "List Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/doctors?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Number of records to return"
+                }
+              ]
+            },
+            "description": "Get all doctors (paginated)"
+          }
+        },
+        {
+          "name": "Get Doctor by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}"]
+            },
+            "description": "Get specific doctor by UUID"
+          }
+        },
+        {
+          "name": "List Sales Reps",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sales-reps?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sales-reps"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get all sales representatives"
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"]
+            },
+            "description": "Get all products"
+          }
+        },
+        {
+          "name": "List Pharmacies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get all pharmacies"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transaction Data",
+      "item": [
+        {
+          "name": "List Call Planning",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/call-planning?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "call-planning"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get call planning records"
+          }
+        },
+        {
+          "name": "List Secondary Sales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/secondary-sales?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secondary-sales"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get secondary sales records"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Business Views",
+      "item": [
+        {
+          "name": "Rep Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rep-performance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rep-performance"]
+            },
+            "description": "Get sales rep performance metrics (monthly)"
+          }
+        },
+        {
+          "name": "Product Region Trends",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/product-trends",
+              "host": ["{{base_url}}"],
+              "path": ["api", "product-trends"]
+            },
+            "description": "Get product sales trends by region and month"
+          }
+        },
+        {
+          "name": "Call Effectiveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/call-effectiveness",
+              "host": ["{{base_url}}"],
+              "path": ["api", "call-effectiveness"]
+            },
+            "description": "Get call success metrics by doctor tier"
+          }
+        },
+        {
+          "name": "Inactive Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inactive-doctors?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inactive-doctors"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30",
+                  "description": "Filter doctors not called in X days"
+                }
+              ]
+            },
+            "description": "Get doctors not called for 30+ days"
+          }
+        },
+        {
+          "name": "At-Risk Territories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/at-risk-territories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "at-risk-territories"]
+            },
+            "description": "Get territories with declining sales/adherence"
+          }
+        },
+        {
+          "name": "Territory Coverage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/territory-coverage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "territory-coverage"]
+            },
+            "description": "Get territory coverage summary per rep"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "doctor_id",
+      "value": "",
+      "type": "string",
+      "description": "Replace with actual doctor UUID from List Doctors response"
+    }
+  ]
+}
