@@ -1,8 +1,8 @@
-# Sales Agent Database
+# Sales Agent Database (MSSQL)
 
-PostgreSQL database infrastructure for the "Talk to Your Sales Data" AI chatbot agent on Vertx platform.
+SQL Server database infrastructure for the "Talk to Your Sales Data" AI chatbot agent on Vertx platform.
 
-**Status**: Phase 0 — Docker Postgres up, schema + dummy data seeded (360k+ records, 3 years).
+**Status**: Phase 0 — Docker MSSQL up, schema created, ready for data seeding.
 
 ---
 
@@ -13,7 +13,7 @@ PostgreSQL database infrastructure for the "Talk to Your Sales Data" AI chatbot 
 - Python 3.8+ (for seed data)
 - ~5GB disk space
 
-### Setup (5 minutes)
+### Setup (5-10 minutes)
 
 ```bash
 cd /Users/tasbeha/sales-agent-db
@@ -21,36 +21,39 @@ cd /Users/tasbeha/sales-agent-db
 # 1. Copy environment file
 cp .env.example .env
 
-# 2. Start Docker containers
+# 2. Start Docker container
 docker compose up -d
 
-# 3. Wait for health check
-sleep 15 && docker compose ps
+# 3. Wait for SQL Server to be healthy (first time: ~30 seconds)
+sleep 30 && docker compose ps
 # STATUS should show "healthy"
 
-# 4. Install Python dependencies
+# 4. Create the database (run once)
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -Q "CREATE DATABASE [sales_agent_demo]"
+
+# 5. Install Python dependencies
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 5. Seed dummy data (3 years)
-python init/03_seed_data.py
-# Takes ~2-3 minutes
+# 6. Seed dummy data (3 years)
+python init/mssql/03_seed_data.py
+# Takes ~5-10 minutes
 ```
 
 ### Verify Setup
 
 ```bash
-# Check data was loaded
-docker exec sales-agent-postgres psql -U sales_agent -d sales_agent_demo -c \
-  "SELECT 'doctors', COUNT(*) FROM doctors UNION ALL 
-   SELECT 'call_planning', COUNT(*) FROM call_planning UNION ALL
-   SELECT 'secondary_sales', COUNT(*) FROM secondary_sales;"
+# Check tables exist
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME;"
 
-# Access pgAdmin (web UI)
-http://localhost:5050
-# Login: admin@example.com / admin
-# Connect to: sales-agent-postgres:5432
+# Check record counts (after seeding)
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT 'doctors', COUNT(*) FROM dbo.doctors UNION ALL SELECT 'call_planning', COUNT(*) FROM dbo.call_planning UNION ALL SELECT 'secondary_sales', COUNT(*) FROM dbo.secondary_sales UNION ALL SELECT 'sales_reps', COUNT(*) FROM dbo.sales_reps UNION ALL SELECT 'products', COUNT(*) FROM dbo.products UNION ALL SELECT 'pharmacies', COUNT(*) FROM dbo.pharmacies;"
+
+# Check views exist
+docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='dbo' ORDER BY TABLE_NAME;"
+
+# Or use SQL Management tools (VS Code mssql extension, Azure Data Studio, etc.)
 ```
 
 ---
@@ -59,8 +62,8 @@ http://localhost:5050
 
 ```
 sales-agent-db/
-├── docker-compose.yml         # Postgres + pgAdmin services
-├── init/
+├── docker-compose.yml         # MSSQL service
+├── init/mssql/
 │   ├── 01_schema.sql          # Tables (7) + indexes
 │   ├── 02_views.sql           # Aggregation views (6)
 │   └── 03_seed_data.py        # Data generator (360k+ records)
@@ -68,8 +71,7 @@ sales-agent-db/
 ├── requirements.txt           # Python dependencies
 ├── README.md                  # This file (quick start)
 ├── SETUP_GUIDE.md             # Detailed setup & data model
-├── COMMANDS.md                # Command reference (600+ lines)
-├── VERTX_INTEGRATION.md       # Connect to Vertx
+├── COMMANDS.md                # Command reference
 └── venv/                      # Python environment
 ```
 
@@ -79,11 +81,14 @@ sales-agent-db/
 
 | Need | Command |
 |------|---------|
-| **View logs** | `docker compose logs -f postgres` |
-| **Connect to DB** | `docker exec -it sales-agent-postgres psql -U sales_agent -d sales_agent_demo` |
-| **Stop containers** | `docker compose down` |
-| **Reset all data** | `docker compose down -v && docker compose up -d` |
-| **Run seed script** | `source venv/bin/activate && python init/03_seed_data.py` |
+| **List tables** | `docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='dbo';"` |
+| **Count records** | `docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo -Q "SELECT 'Total Doctors:', COUNT(*) FROM dbo.doctors;"` |
+| **View logs** | `docker compose logs -f mssql` |
+| **Check status** | `docker compose ps` |
+| **Connect via sqlcmd** | `docker exec sales-agent-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "Sales@Agent123" -d sales_agent_demo` |
+| **Stop container** | `docker compose down` |
+| **Reset all data** | `docker compose down -v` (then repeat setup) |
+| **Run seed script** | `source venv/bin/activate && python init/mssql/03_seed_data.py` |
 
 ---
 
@@ -92,7 +97,6 @@ sales-agent-db/
 - **360,884 records** seeded across 3 years (2023–2025)
 - **7 tables**: doctors (300), call_planning (31k), secondary_sales (329k), products (15), sales_reps (50), pharmacies (150), audit_log
 - **6 views** for common agent queries (rep performance, product trends, inactive doctors, at-risk territories, etc.)
-- **pgAdmin** web UI at http://localhost:5050 for data exploration
 - **Realistic patterns**: seasonality, declining region trends, 78% call adherence
 
 ---
@@ -100,21 +104,18 @@ sales-agent-db/
 ## 📚 Documentation
 
 - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** — Data model, patterns, security, implementation notes
-- **[COMMANDS.md](COMMANDS.md)** — 600+ lines of organized command reference
+- **[COMMANDS.md](COMMANDS.md)** — Command reference (sqlcmd, setup, troubleshooting)
 
 ---
 
 ## 🔌 Next: Connect to Vertx
 
-Database is ready. Next step: determine how to connect to Vertx.
+Database is ready at `localhost:1433` (MSSQL standard port).
 
 **TBD**: Investigate Vertx connection options:
-- Native database support in Vertx?
+- Native MSSQL support in Vertx?
 - HTTP API wrapper approach?
 - Custom connector?
-- Network/deployment requirements?
-
-Database is accessible at `localhost:5433` and ready for integration testing.
 
 ---
 
@@ -122,9 +123,11 @@ Database is accessible at `localhost:5433` and ready for integration testing.
 
 **Docker won't start?** Check logs: `docker compose logs`
 
-**Postgres connection error?** Verify health: `docker compose ps` (should show "healthy")
+**MSSQL not healthy?** It takes ~30-60 sec on first start. Wait and try again: `docker compose ps`
 
-**Seed script crashes?** Try again: `source venv/bin/activate && python init/03_seed_data.py`
+**Can't connect?** Verify credentials (sa/Sales@Agent123) match .env file
+
+**Seed script fails?** Try again: `source venv/bin/activate && python init/mssql/03_seed_data.py`
 
 **More help?** See **[COMMANDS.md](COMMANDS.md)** for troubleshooting commands.
 
@@ -132,10 +135,10 @@ Database is accessible at `localhost:5433` and ready for integration testing.
 
 ## 📞 Next Steps
 
-1. ✅ Database running → See SETUP_GUIDE.md for details
-2. ⏭️ Connect to Vertx → See VERTX_INTEGRATION.md
+1. ✅ MSSQL database running → See SETUP_GUIDE.md for details
+2. ⏭️ Connect to Vertx → Method TBD
 3. ⏭️ Build workflows → Use queries in COMMANDS.md
 
 ---
 
-**Status**: Phase 0 complete. Ready for Phase 1 (Vertx integration).
+**Status**: Phase 0 complete (MSSQL setup). Ready for Vertx integration testing.

@@ -1,42 +1,32 @@
+# Sales Agent MSSQL Database
+# For Token Bazaar server deployment:
+# - Ensure port 1433 is open on the firewall
+# - Update DB_HOST in .env to server IP (35.240.218.50)
+# - Update MSSQL_PASSWORD in .env if needed (default: Sales@Agent123)
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: sales-agent-postgres
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sales-agent-mssql
     environment:
-      POSTGRES_DB: sales_agent_demo
-      POSTGRES_USER: sales_agent
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-sales_agent_password}
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_PASSWORD:-Sales@Agent123}
+      MSSQL_PID: Express
     ports:
-      - "5433:5432"
+      - "1433:1433"
     volumes:
-      - sales_agent_data:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d
+      - mssql_data:/var/opt/mssql
+      - ./init/mssql:/mssql-scripts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sales_agent -d sales_agent_demo"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${MSSQL_PASSWORD:-Sales@Agent123}", "-Q", "SELECT 1", "-b"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - sales-agent-net
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: sales-agent-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - sales-agent-net
-    depends_on:
-      - postgres
-
 volumes:
-  sales_agent_data:
-  pgadmin_data:
+  mssql_data:
 
 networks:
   sales-agent-net:
