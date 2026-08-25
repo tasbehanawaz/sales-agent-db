@@ -6,14 +6,25 @@ const { query } = require('./db');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
+const API_KEY = process.env.API_KEY || 'sk_prod_b0d7dc8f51089eecc448914107945db024b1d8383f176fea';
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(morgan('short'));
 app.use(express.json());
 
+const validateApiKey = (req, res, next) => {
+  const key = req.headers['x-api-key'];
+  if (!key || key !== API_KEY) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Invalid or missing API key' });
+  }
+  next();
+};
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+app.use('/api', validateApiKey);
 
 app.get('/api/doctors', async (req, res) => {
   try {
