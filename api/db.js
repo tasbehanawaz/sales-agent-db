@@ -30,9 +30,15 @@ async function getPool() {
   return pool;
 }
 
-async function query(sqlQuery) {
+async function query(sqlQuery, params = {}) {
   const p = await getPool();
-  const result = await p.request().query(sqlQuery);
+  const request = p.request();
+
+  Object.keys(params).forEach(key => {
+    request.input(key, params[key]);
+  });
+
+  const result = await request.query(sqlQuery);
   return result.recordset;
 }
 

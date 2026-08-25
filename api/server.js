@@ -17,8 +17,8 @@ app.get('/health', (req, res) => {
 
 app.get('/api/doctors', async (req, res) => {
   try {
-    const limit = req.query.limit || 100;
-    const data = await query(`SELECT TOP ${limit} * FROM dbo.doctors ORDER BY doctor_id`);
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.doctors ORDER BY doctor_id`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -27,7 +27,7 @@ app.get('/api/doctors', async (req, res) => {
 
 app.get('/api/doctors/:id', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.doctors WHERE doctor_id = '${req.params.id}'`);
+    const data = await query(`SELECT * FROM dbo.doctors WHERE doctor_id = @id`, { id: req.params.id });
     res.json({ success: true, data: data[0] || null });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -36,8 +36,8 @@ app.get('/api/doctors/:id', async (req, res) => {
 
 app.get('/api/sales-reps', async (req, res) => {
   try {
-    const limit = req.query.limit || 100;
-    const data = await query(`SELECT TOP ${limit} * FROM dbo.sales_reps ORDER BY rep_id`);
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.sales_reps ORDER BY rep_id`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -46,7 +46,7 @@ app.get('/api/sales-reps', async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.products ORDER BY product_id`);
+    const data = await query(`SELECT * FROM dbo.products ORDER BY product_id`, {});
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -55,8 +55,8 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/api/pharmacies', async (req, res) => {
   try {
-    const limit = req.query.limit || 100;
-    const data = await query(`SELECT TOP ${limit} * FROM dbo.pharmacies ORDER BY pharmacy_id`);
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.pharmacies ORDER BY pharmacy_id`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -65,8 +65,8 @@ app.get('/api/pharmacies', async (req, res) => {
 
 app.get('/api/call-planning', async (req, res) => {
   try {
-    const limit = req.query.limit || 50;
-    const data = await query(`SELECT TOP ${limit} * FROM dbo.call_planning ORDER BY call_id`);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.call_planning ORDER BY call_id`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -75,8 +75,8 @@ app.get('/api/call-planning', async (req, res) => {
 
 app.get('/api/secondary-sales', async (req, res) => {
   try {
-    const limit = req.query.limit || 50;
-    const data = await query(`SELECT TOP ${limit} * FROM dbo.secondary_sales ORDER BY sale_id`);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.secondary_sales ORDER BY sale_id`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -112,8 +112,8 @@ app.get('/api/call-effectiveness', async (req, res) => {
 
 app.get('/api/inactive-doctors', async (req, res) => {
   try {
-    const days = req.query.days || 30;
-    const data = await query(`SELECT * FROM dbo.vw_inactive_doctors WHERE days_since_last_call >= ${days} ORDER BY days_since_last_call DESC`);
+    const days = Math.max(parseInt(req.query.days) || 30, 0);
+    const data = await query(`SELECT * FROM dbo.vw_inactive_doctors WHERE days_since_last_call >= @days ORDER BY days_since_last_call DESC`, { days });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
