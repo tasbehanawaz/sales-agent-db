@@ -1,27 +1,79 @@
-# Sales Agent MSSQL Database
-# For Token Bazaar server deployment:
-# - Ensure port 1433 is open on the firewall
-# - Update DB_HOST in .env to server IP (35.240.218.50)
-# - Update MSSQL_PASSWORD in .env if needed (default: Sales@Agent123)
+# Sales Agent — MSSQL database + Node/Express API
+#
+# Token Bazaar server: 34.88.207.18 (project token-bazaar, zone europe-north1-c)
+#   - MSSQL   host port ${MSSQL_HOST_PORT:-1433}  -> firewall rule allow-mssql-1433
+#   - API     host port ${API_HOST_PORT:-3002}    -> needs its own firewall rule (see DEPLOYMENT.md)
+#
+# 3002 because 3000/3001 are taken by the other projects on this box. Only the
+# HOST side moves — the API still listens on 3000 inside its container.
+#
+# All credentials come from .env — nothing is defaulted here on purpose, so a
+# missing .env fails loudly instead of silently falling back to a known password.
 
 services:
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sales-agent-mssql
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_PASSWORD:-Sales@Agent123}
+      MSSQL_SA_PASSWORD: ${MSSQL_PASSWORD:?set MSSQL_PASSWORD in .env}
       MSSQL_PID: Express
+      # SQL Server otherwise sizes itself against the host's total RAM and gets
+      # OOM-killed by the cgroup. Keep this below mem_limit.
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+    mem_limit: 2g
+    cpus: "1.0"
     ports:
-      - "1433:1433"
+      - "${MSSQL_HOST_PORT:-1433}:1433"
     volumes:
       - mssql_data:/var/opt/mssql
       - ./init/mssql:/mssql-scripts
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${MSSQL_PASSWORD:-Sales@Agent123}", "-Q", "SELECT 1", "-b"]
+      # -C is required: sqlcmd 18 defaults to mandatory encryption and rejects
+      # the container's self-signed cert without it.
+      # MSSQL_USER follows the sa rename (see DEPLOYMENT.md Step 4).
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "localhost",
+             "-U", "${MSSQL_USER:-sa}", "-P", "${MSSQL_PASSWORD}",
+             "-Q", "SELECT 1", "-b"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
+    networks:
+      - sales-agent-net
+
+  api:
+    build:
+      context: ./api
+    container_name: sales-agent-api
+    restart: unless-stopped
+    env_file:
+      - ./api/.env
+    environment:
+      # These override whatever api/.env holds. Inside the compose network the
+      # API reaches SQL Server by service name — no need to hairpin out through
+      # the public IP, and it keeps working if the host port ever changes.
+      DB_HOST: mssql
+      DB_PORT: "1433"
+      API_PORT: "3000"
+      NODE_ENV: production
+    ports:
+      # Swap to "127.0.0.1:${API_HOST_PORT:-3002}:3000" to keep it off the
+      # public interface and reach it only via the nginx reverse proxy.
+      - "127.0.0.1:${API_HOST_PORT:-3002}:3000"
+    depends_on:
+      mssql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://127.0.0.1:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    cpus: "0.5"
     networks:
       - sales-agent-net
 
