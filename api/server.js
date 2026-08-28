@@ -96,7 +96,8 @@ app.get('/api/secondary-sales', async (req, res) => {
 
 app.get('/api/rep-performance', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.vw_rep_performance ORDER BY name`);
+    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
+    const data = await query(`SELECT TOP (@limit) * FROM dbo.vw_rep_performance ORDER BY name`, { limit });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
