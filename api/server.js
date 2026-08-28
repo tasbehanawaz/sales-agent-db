@@ -96,8 +96,41 @@ app.get('/api/secondary-sales', async (req, res) => {
 
 app.get('/api/rep-performance', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
-    const data = await query(`SELECT TOP (@limit) * FROM dbo.vw_rep_performance ORDER BY name`, { limit });
+    // Aggregate sales and calls separately to avoid a cartesian join.
+    const data = await query(`
+      SELECT
+        r.[rep_id],
+        r.[name],
+        r.[territory],
+        r.[region],
+        ISNULL(s.[total_sales], 0) AS [total_sales],
+        ISNULL(s.[unique_pharmacies], 0) AS [unique_pharmacies],
+        ISNULL(c.[total_calls], 0) AS [total_calls],
+        ISNULL(c.[completed_calls], 0) AS [completed_calls],
+        ROUND(
+          CAST(ISNULL(c.[completed_calls], 0) AS FLOAT) * 100.0 /
+          NULLIF(c.[total_calls], 0),
+          2
+        ) AS [call_adherence_pct]
+      FROM [dbo].[sales_reps] r
+      LEFT JOIN (
+        SELECT
+          [rep_id],
+          SUM([value_sold]) AS [total_sales],
+          COUNT(DISTINCT [pharmacy_id]) AS [unique_pharmacies]
+        FROM [dbo].[secondary_sales]
+        GROUP BY [rep_id]
+      ) s ON r.[rep_id] = s.[rep_id]
+      LEFT JOIN (
+        SELECT
+          [rep_id],
+          COUNT(*) AS [total_calls],
+          SUM(CASE WHEN [actual_call_date] IS NOT NULL THEN 1 ELSE 0 END) AS [completed_calls]
+        FROM [dbo].[call_planning]
+        GROUP BY [rep_id]
+      ) c ON r.[rep_id] = c.[rep_id]
+      ORDER BY r.[name]
+    `);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

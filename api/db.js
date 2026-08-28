@@ -11,22 +11,39 @@ const config = {
       password: process.env.DB_PASSWORD
     }
   },
+  connectionTimeout: 30000,
+  requestTimeout: 30000,
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000
+  },
   options: {
     trustServerCertificate: true,
-    encrypt: true,
-    connectionTimeout: 30000,
-    requestTimeout: 60000
+    encrypt: true
   }
 };
 
 let pool;
 
 async function getPool() {
-  if (!pool) {
-    pool = new sql.ConnectionPool(config);
-    await pool.connect();
-    console.log('✓ Database connected');
+  if (pool && pool.connected) {
+    return pool;
   }
+
+  if (pool) {
+    try { await pool.close(); } catch (_) {}
+    pool = null;
+  }
+
+  const newPool = new sql.ConnectionPool(config);
+  newPool.on('error', err => {
+    console.error('Database pool error:', err.message);
+    pool = null;
+  });
+  await newPool.connect();
+  pool = newPool;
+  console.log('✓ Database connected');
   return pool;
 }
 
@@ -38,8 +55,16 @@ async function query(sqlQuery, params = {}) {
     request.input(key, params[key]);
   });
 
-  const result = await request.query(sqlQuery);
-  return result.recordset;
+  try {
+    const result = await request.query(sqlQuery);
+    return result.recordset;
+  } catch (err) {
+    if (err.code === 'ETIMEOUT' || err.code === 'ECONNCLOSED' || err.code === 'ESOCKET') {
+      try { await p.close(); } catch (_) {}
+      pool = null;
+    }
+    throw err;
+  }
 }
 
 module.exports = { getPool, query, sql };
