@@ -167,7 +167,46 @@ app.get('/api/inactive-doctors', async (req, res) => {
 
 app.get('/api/at-risk-territories', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.vw_at_risk_territories ORDER BY sales_trend_pct ASC`);
+    // Anchor to the last sale date in the seed, not GETDATE(). The view
+    // looks at the last 90 days from today, so 2023–2025 data never matches.
+    const data = await query(`
+      WITH as_of AS (
+        SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales
+      ),
+      sales AS (
+        SELECT
+          ss.rep_id,
+          SUM(CASE WHEN ss.sale_date > DATEADD(YEAR, -1, a.d) AND ss.sale_date <= a.d THEN ss.value_sold ELSE 0 END) AS recent,
+          SUM(CASE WHEN ss.sale_date > DATEADD(YEAR, -2, a.d) AND ss.sale_date <= DATEADD(YEAR, -1, a.d) THEN ss.value_sold ELSE 0 END) AS prior
+        FROM dbo.secondary_sales ss
+        CROSS JOIN as_of a
+        WHERE ss.sale_date > DATEADD(YEAR, -2, a.d)
+        GROUP BY ss.rep_id
+      ),
+      calls AS (
+        SELECT
+          cp.rep_id,
+          COUNT(*) AS planned,
+          SUM(CASE WHEN cp.actual_call_date IS NOT NULL THEN 1 ELSE 0 END) AS done
+        FROM dbo.call_planning cp
+        CROSS JOIN as_of a
+        WHERE cp.planned_date > DATEADD(DAY, -90, a.d) AND cp.planned_date <= a.d
+        GROUP BY cp.rep_id
+      )
+      SELECT
+        r.rep_id,
+        r.name,
+        r.territory,
+        r.region,
+        ROUND((s.recent - s.prior) * 100.0 / NULLIF(s.prior, 0), 2) AS sales_trend_pct,
+        ROUND(CAST(c.done AS FLOAT) * 100.0 / NULLIF(c.planned, 0), 2) AS call_adherence_pct
+      FROM dbo.sales_reps r
+      LEFT JOIN sales s ON r.rep_id = s.rep_id
+      LEFT JOIN calls c ON r.rep_id = c.rep_id
+      WHERE ROUND((s.recent - s.prior) * 100.0 / NULLIF(s.prior, 0), 2) < -5
+         OR ROUND(CAST(c.done AS FLOAT) * 100.0 / NULLIF(c.planned, 0), 2) < 70
+      ORDER BY sales_trend_pct ASC
+    `);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -176,7 +215,47 @@ app.get('/api/at-risk-territories', async (req, res) => {
 
 app.get('/api/territory-coverage', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.vw_territory_coverage ORDER BY coverage_pct DESC`);
+    // Aggregate doctors by territory and calls by rep. The view joins
+    // every doctor to every rep (ON r.rep_id IS NOT NULL) then to calls.
+    const data = await query(`
+      SELECT
+        r.[rep_id],
+        r.[name],
+        r.[territory],
+        r.[region],
+        ISNULL(d.[total_doctors], 0) AS [total_doctors],
+        ISNULL(d.[tier_a_count], 0) AS [tier_a_count],
+        ISNULL(d.[tier_b_count], 0) AS [tier_b_count],
+        ISNULL(d.[tier_c_count], 0) AS [tier_c_count],
+        ISNULL(c.[total_calls], 0) AS [total_calls],
+        ISNULL(c.[completed_calls], 0) AS [completed_calls],
+        ROUND(
+          CAST(ISNULL(c.[completed_calls], 0) AS FLOAT) * 100.0 /
+          NULLIF(c.[total_calls], 0),
+          2
+        ) AS [coverage_pct]
+      FROM [dbo].[sales_reps] r
+      LEFT JOIN (
+        SELECT
+          [territory],
+          [region],
+          COUNT(*) AS [total_doctors],
+          SUM(CASE WHEN [tier] = 'A' THEN 1 ELSE 0 END) AS [tier_a_count],
+          SUM(CASE WHEN [tier] = 'B' THEN 1 ELSE 0 END) AS [tier_b_count],
+          SUM(CASE WHEN [tier] = 'C' THEN 1 ELSE 0 END) AS [tier_c_count]
+        FROM [dbo].[doctors]
+        GROUP BY [territory], [region]
+      ) d ON r.[territory] = d.[territory] AND r.[region] = d.[region]
+      LEFT JOIN (
+        SELECT
+          [rep_id],
+          COUNT(*) AS [total_calls],
+          SUM(CASE WHEN [actual_call_date] IS NOT NULL THEN 1 ELSE 0 END) AS [completed_calls]
+        FROM [dbo].[call_planning]
+        GROUP BY [rep_id]
+      ) c ON r.[rep_id] = c.[rep_id]
+      ORDER BY [coverage_pct] DESC
+    `);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
