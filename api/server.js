@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const { query } = require('./db');
+const { getForecast, getActions } = require('./insights');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -257,6 +258,42 @@ app.get('/api/territory-coverage', async (req, res) => {
       ORDER BY [coverage_pct] DESC
     `);
     res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/insights/forecast', async (req, res) => {
+  try {
+    const data = await getForecast(query);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/insights/actions', async (req, res) => {
+  try {
+    const data = await getActions(query);
+    res.json({ success: true, count: data.actions.length, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/insights', async (req, res) => {
+  try {
+    const [forecast, actions] = await Promise.all([getForecast(query), getActions(query)]);
+    res.json({
+      success: true,
+      data: {
+        as_of: forecast.as_of,
+        summary: `${forecast.summary} ${actions.summary}`,
+        forecast,
+        actions: actions.actions,
+        chart: forecast.chart
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
