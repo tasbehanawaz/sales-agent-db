@@ -7,7 +7,11 @@ const { getForecast, getActions } = require('./insights');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
-const API_KEY = process.env.API_KEY || 'sk_prod_b0d7dc8f51089eecc448914107945db024b1d8383f176fea';
+const API_KEY = process.env.API_KEY;
+if (!API_KEY) {
+  console.error('Missing API_KEY. Set it in api/.env');
+  process.exit(1);
+}
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(morgan('short'));
@@ -140,7 +144,39 @@ app.get('/api/rep-performance', async (req, res) => {
 
 app.get('/api/product-trends', async (req, res) => {
   try {
-    const data = await query(`SELECT TOP 100 * FROM dbo.vw_product_region_trends ORDER BY [month] DESC`);
+    const data = await query(`
+      WITH as_of AS (
+        SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales
+      ),
+      monthly AS (
+        SELECT
+          ss.product_id,
+          ss.region,
+          DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1) AS month,
+          SUM(ss.quantity_sold) AS qty_sold,
+          SUM(ss.value_sold) AS value_sold,
+          COUNT(DISTINCT ss.pharmacy_id) AS pharmacy_count,
+          COUNT(DISTINCT ss.rep_id) AS rep_count
+        FROM dbo.secondary_sales ss
+        CROSS JOIN as_of a
+        WHERE ss.sale_date > DATEADD(YEAR, -1, a.d)
+        GROUP BY ss.product_id, ss.region, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
+      )
+      SELECT
+        p.product_id,
+        p.sku,
+        p.brand,
+        p.therapy_area,
+        m.region,
+        m.month,
+        m.qty_sold,
+        m.value_sold,
+        m.pharmacy_count,
+        m.rep_count
+      FROM monthly m
+      JOIN dbo.products p ON p.product_id = m.product_id
+      ORDER BY m.month DESC, p.sku, m.region
+    `);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -149,7 +185,80 @@ app.get('/api/product-trends', async (req, res) => {
 
 app.get('/api/call-effectiveness', async (req, res) => {
   try {
-    const data = await query(`SELECT * FROM dbo.vw_call_effectiveness ORDER BY [month] DESC`);
+    // Call stats from calls+doctors only. Post-call sales use same calendar
+    // month as the visit (not a 30-day range join against 329k sales rows).
+    const data = await query(`
+      WITH as_of AS (
+        SELECT CAST(MAX(planned_date) AS DATE) AS d FROM dbo.call_planning
+      ),
+      call_stats AS (
+        SELECT
+          d.tier,
+          d.region,
+          d.market,
+          DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1) AS month,
+          COUNT(*) AS total_calls,
+          SUM(CASE WHEN cp.actual_call_date IS NOT NULL THEN 1 ELSE 0 END) AS completed_calls,
+          AVG(CAST(cp.feedback_score AS FLOAT)) AS avg_feedback
+        FROM dbo.call_planning cp
+        JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id
+        CROSS JOIN as_of a
+        WHERE cp.planned_date > DATEADD(YEAR, -1, a.d)
+        GROUP BY d.tier, d.region, d.market, DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1)
+      ),
+      sales_m AS (
+        SELECT
+          ss.rep_id,
+          ss.product_id,
+          DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1) AS month,
+          SUM(ss.value_sold) AS value_sold,
+          COUNT(*) AS sales_count
+        FROM dbo.secondary_sales ss
+        CROSS JOIN as_of a
+        WHERE ss.sale_date > DATEADD(YEAR, -1, a.d)
+        GROUP BY ss.rep_id, ss.product_id, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
+      ),
+      post_sales AS (
+        SELECT
+          d.tier,
+          d.region,
+          d.market,
+          DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1) AS month,
+          SUM(s.value_sold) AS sales_value_post_call,
+          SUM(s.sales_count) AS sales_count
+        FROM dbo.call_planning cp
+        JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id
+        JOIN sales_m s
+          ON s.rep_id = cp.rep_id
+          AND s.product_id = cp.product_id
+          AND s.month = DATEFROMPARTS(YEAR(cp.actual_call_date), MONTH(cp.actual_call_date), 1)
+        CROSS JOIN as_of a
+        WHERE cp.actual_call_date IS NOT NULL
+          AND cp.planned_date > DATEADD(YEAR, -1, a.d)
+        GROUP BY d.tier, d.region, d.market, DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1)
+      )
+      SELECT
+        cs.tier,
+        cs.region,
+        cs.market,
+        cs.month,
+        cs.total_calls,
+        cs.completed_calls,
+        ROUND(
+          CAST(cs.completed_calls AS FLOAT) * 100.0 / NULLIF(cs.total_calls, 0),
+          2
+        ) AS adherence_pct,
+        cs.avg_feedback,
+        ISNULL(ps.sales_value_post_call, 0) AS sales_value_post_call,
+        ISNULL(ps.sales_count, 0) AS sales_count
+      FROM call_stats cs
+      LEFT JOIN post_sales ps
+        ON cs.tier = ps.tier
+        AND cs.region = ps.region
+        AND cs.market = ps.market
+        AND cs.month = ps.month
+      ORDER BY cs.month DESC, cs.region, cs.tier
+    `);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -159,7 +268,30 @@ app.get('/api/call-effectiveness', async (req, res) => {
 app.get('/api/inactive-doctors', async (req, res) => {
   try {
     const days = Math.max(parseInt(req.query.days) || 30, 0);
-    const data = await query(`SELECT * FROM dbo.vw_inactive_doctors WHERE days_since_last_call >= @days ORDER BY days_since_last_call DESC`, { days });
+    const data = await query(`
+      WITH as_of AS (
+        SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales
+      )
+      SELECT
+        d.doctor_id,
+        d.doctor_name,
+        d.specialty,
+        d.tier,
+        d.region,
+        d.market,
+        MAX(cp.actual_call_date) AS last_call_date,
+        DATEDIFF(DAY, MAX(cp.actual_call_date), a.d) AS days_since_last_call,
+        COUNT(cp.call_id) AS total_calls_made
+      FROM dbo.doctors d
+      CROSS JOIN as_of a
+      LEFT JOIN dbo.call_planning cp
+        ON d.doctor_id = cp.doctor_id AND cp.actual_call_date IS NOT NULL
+      WHERE d.status = 'active'
+      GROUP BY d.doctor_id, d.doctor_name, d.specialty, d.tier, d.region, d.market, a.d
+      HAVING MAX(cp.actual_call_date) IS NULL
+          OR DATEDIFF(DAY, MAX(cp.actual_call_date), a.d) >= @days
+      ORDER BY days_since_last_call DESC
+    `, { days });
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
