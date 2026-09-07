@@ -114,9 +114,148 @@ async function getForecast(query) {
 
   return {
     as_of: monthKey(asOf),
-    method: 'Same month last year, scaled by each region’s latest 12-month vs prior 12-month change.',
+    method: "Same month last year, scaled by each region’s latest 12-month vs prior 12-month change.",
     summary,
-    regions: regionForecasts,
+    regions: regionForecasts.map(r => ({
+      region: r.region,
+      last_12m: r.last_12m,
+      prior_12m: r.prior_12m,
+      yoy_pct: r.yoy_pct,
+      next_3m_forecast: r.next_3m_forecast,
+      data: r.months.map(m => [m.month, m.actual != null ? m.actual : m.forecast])
+    })),
+    chart
+  };
+}
+
+async function getProductForecast(query) {
+  const asOfRows = await query(`SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales`);
+  const asOf = asOfRows[0].d;
+  const lastMonth = monthKey(asOf);
+
+  const monthly = await query(`
+    WITH as_of AS (
+      SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales
+    )
+    SELECT
+      p.product_id,
+      p.sku,
+      p.brand,
+      ss.region,
+      DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1) AS month,
+      SUM(ss.value_sold) AS value_sold
+    FROM dbo.secondary_sales ss
+    JOIN dbo.products p ON p.product_id = ss.product_id
+    CROSS JOIN as_of a
+    WHERE ss.sale_date > DATEADD(YEAR, -2, a.d) AND ss.sale_date <= a.d
+    GROUP BY p.product_id, p.sku, p.brand, ss.region, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
+    ORDER BY p.sku, ss.region, month
+  `);
+
+  const byProduct = {};
+  for (const row of monthly) {
+    const productKey = row.sku;
+    if (!byProduct[productKey]) {
+      byProduct[productKey] = {
+        product_id: row.product_id,
+        sku: row.sku,
+        brand: row.brand,
+        byRegion: {}
+      };
+    }
+    if (!byProduct[productKey].byRegion[row.region]) {
+      byProduct[productKey].byRegion[row.region] = {};
+    }
+    byProduct[productKey].byRegion[row.region][monthKey(row.month)] = Number(row.value_sold);
+  }
+
+  const actualMonths = monthRangeEnding(lastMonth, 12);
+  const priorMonths = monthRangeEnding(shiftMonth(lastMonth, -12), 12);
+  const forecastMonths = [1, 2, 3].map((i) => shiftMonth(lastMonth, i));
+  const chartLabels = [...actualMonths, ...forecastMonths];
+  const products = Object.keys(byProduct).sort();
+
+  const productForecasts = products.map((sku) => {
+    const product = byProduct[sku];
+    const regionForecasts = Object.keys(product.byRegion).map((region) => {
+      const byMonth = product.byRegion[region];
+      const last12 = sumMonths(byMonth, actualMonths);
+      const prior12 = sumMonths(byMonth, priorMonths);
+      const yoyPct = prior12 ? round2(((last12 - prior12) / prior12) * 100) : null;
+      const factor = prior12 ? last12 / prior12 : 1;
+
+      const history = actualMonths.map((month) => ({
+        month,
+        actual: round2(byMonth[month] || 0),
+        forecast: null
+      }));
+
+      const projected = forecastMonths.map((month) => {
+        const sameLastYear = byMonth[shiftMonth(month, -12)] || 0;
+        return {
+          month,
+          actual: null,
+          forecast: round2(sameLastYear * factor)
+        };
+      });
+
+      return {
+        region,
+        last_12m: round2(last12),
+        prior_12m: round2(prior12),
+        yoy_pct: yoyPct,
+        next_3m_forecast: round2(projected.reduce((s, p) => s + p.forecast, 0)),
+        months: [...history, ...projected]
+      };
+    });
+
+    const totalForecast = regionForecasts.reduce((sum, r) => sum + r.next_3m_forecast, 0);
+    const totalLast12m = regionForecasts.reduce((sum, r) => sum + r.last_12m, 0);
+
+    return {
+      product_id: product.product_id,
+      sku: product.sku,
+      brand: product.brand,
+      total_last_12m: round2(totalLast12m),
+      total_next_3m_forecast: round2(totalForecast),
+      by_region: regionForecasts
+    };
+  });
+
+  const chart = {
+    type: 'line',
+    title: 'Secondary sales by product (last 12 months + 3-month forecast)',
+    x_axis: 'month',
+    y_axis: 'value_sold',
+    labels: chartLabels,
+    forecast_start: forecastMonths[0],
+    series: productForecasts.map((p) => ({
+      name: p.sku,
+      data: p.by_region[0]?.months.map((m) => m.actual != null ? m.actual : m.forecast) || []
+    }))
+  };
+
+  const summary = `Product forecast built from monthly sales through ${monthKey(asOf)}. Shows 12-month actual sales and 3-month projections for each product across regions.`;
+
+  return {
+    as_of: monthKey(asOf),
+    method: 'Same month last year, scaled by each product region\'s latest 12-month vs prior 12-month change.',
+    summary,
+    products: productForecasts.map(p => ({
+      product_id: p.product_id,
+      sku: p.sku,
+      brand: p.brand,
+      total_last_12m: p.total_last_12m,
+      total_next_3m_forecast: p.total_next_3m_forecast,
+      by_region: p.by_region.map(r => ({
+        region: r.region,
+        last_12m: r.last_12m,
+        prior_12m: r.prior_12m,
+        yoy_pct: r.yoy_pct,
+        next_3m_forecast: r.next_3m_forecast,
+        data: r.months.map(m => [m.month, m.actual != null ? m.actual : m.forecast])
+      }))
+    })),
     chart
   };
 }
@@ -247,4 +386,4 @@ async function getActions(query) {
   };
 }
 
-module.exports = { getForecast, getActions };
+module.exports = { getForecast, getProductForecast, getActions };

@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const { query } = require('./db');
-const { getForecast, getActions } = require('./insights');
+const { getForecast, getProductForecast, getActions } = require('./insights');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -398,6 +398,15 @@ app.get('/api/territory-coverage', async (req, res) => {
 app.get('/api/insights/forecast', async (req, res) => {
   try {
     const data = await getForecast(query);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/insights/forecast/product', async (req, res) => {
+  try {
+    const data = await getProductForecast(query);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
