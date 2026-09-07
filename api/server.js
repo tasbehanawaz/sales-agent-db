@@ -4,6 +4,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const { query } = require('./db');
 const { getForecast, getProductForecast, getActions } = require('./insights');
+const { optimizeResponse } = require('./optimize');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -83,7 +84,8 @@ app.get('/api/call-planning', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
     const data = await query(`SELECT TOP (@limit) * FROM dbo.call_planning ORDER BY call_id`, { limit });
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'timeSeries');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -93,7 +95,8 @@ app.get('/api/secondary-sales', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
     const data = await query(`SELECT TOP (@limit) * FROM dbo.secondary_sales ORDER BY sale_id`, { limit });
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'financial');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -136,7 +139,8 @@ app.get('/api/rep-performance', async (req, res) => {
       ) c ON r.[rep_id] = c.[rep_id]
       ORDER BY r.[name]
     `);
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'financial');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -177,7 +181,8 @@ app.get('/api/product-trends', async (req, res) => {
       JOIN dbo.products p ON p.product_id = m.product_id
       ORDER BY m.month DESC, p.sku, m.region
     `);
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'financial');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -259,7 +264,8 @@ app.get('/api/call-effectiveness', async (req, res) => {
         AND cs.month = ps.month
       ORDER BY cs.month DESC, cs.region, cs.tier
     `);
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'callData');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -292,7 +298,8 @@ app.get('/api/inactive-doctors', async (req, res) => {
           OR DATEDIFF(DAY, MAX(cp.actual_call_date), a.d) >= @days
       ORDER BY days_since_last_call DESC
     `, { days });
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'timeSeries');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -340,7 +347,8 @@ app.get('/api/at-risk-territories', async (req, res) => {
          OR ROUND(CAST(c.done AS FLOAT) * 100.0 / NULLIF(c.planned, 0), 2) < 70
       ORDER BY sales_trend_pct ASC
     `);
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'financial');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -389,7 +397,8 @@ app.get('/api/territory-coverage', async (req, res) => {
       ) c ON r.[rep_id] = c.[rep_id]
       ORDER BY [coverage_pct] DESC
     `);
-    res.json({ success: true, count: data.length, data });
+    const optimized = optimizeResponse(data, 'geographic');
+    res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
