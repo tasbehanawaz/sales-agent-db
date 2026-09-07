@@ -84,8 +84,7 @@ app.get('/api/call-planning', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
     const data = await query(`SELECT TOP (@limit) * FROM dbo.call_planning ORDER BY call_id`, { limit });
-    const optimized = optimizeResponse(data, 'timeSeries');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -95,8 +94,7 @@ app.get('/api/secondary-sales', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
     const data = await query(`SELECT TOP (@limit) * FROM dbo.secondary_sales ORDER BY sale_id`, { limit });
-    const optimized = optimizeResponse(data, 'financial');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -139,8 +137,7 @@ app.get('/api/rep-performance', async (req, res) => {
       ) c ON r.[rep_id] = c.[rep_id]
       ORDER BY r.[name]
     `);
-    const optimized = optimizeResponse(data, 'financial');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -290,6 +287,11 @@ app.get('/api/inactive-doctors', async (req, res) => {
         COUNT(cp.call_id) AS total_calls_made
       FROM dbo.doctors d
       CROSS JOIN as_of a
+
+
+
+
+      
       LEFT JOIN dbo.call_planning cp
         ON d.doctor_id = cp.doctor_id AND cp.actual_call_date IS NOT NULL
       WHERE d.status = 'active'
@@ -298,8 +300,7 @@ app.get('/api/inactive-doctors', async (req, res) => {
           OR DATEDIFF(DAY, MAX(cp.actual_call_date), a.d) >= @days
       ORDER BY days_since_last_call DESC
     `, { days });
-    const optimized = optimizeResponse(data, 'timeSeries');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -347,8 +348,7 @@ app.get('/api/at-risk-territories', async (req, res) => {
          OR ROUND(CAST(c.done AS FLOAT) * 100.0 / NULLIF(c.planned, 0), 2) < 70
       ORDER BY sales_trend_pct ASC
     `);
-    const optimized = optimizeResponse(data, 'financial');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -397,8 +397,7 @@ app.get('/api/territory-coverage', async (req, res) => {
       ) c ON r.[rep_id] = c.[rep_id]
       ORDER BY [coverage_pct] DESC
     `);
-    const optimized = optimizeResponse(data, 'geographic');
-    res.json({ success: true, count: optimized.length, data: optimized });
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
