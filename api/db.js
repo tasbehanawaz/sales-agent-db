@@ -12,11 +12,11 @@ const config = {
     }
   },
   connectionTimeout: 30000,
-  requestTimeout: 30000,
+  requestTimeout: 60000,
   pool: {
     max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
+    min: 2,
+    idleTimeoutMillis: 300000
   },
   options: {
     trustServerCertificate: true,

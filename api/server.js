@@ -2,9 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { query } = require('./db');
+const compression = require('compression');
+const { query, getPool } = require('./db');
 const { getForecast, getProductForecast, getActions } = require('./insights');
 const { optimizeResponse } = require('./optimize');
+const { cacheMiddleware } = require('./cache');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -15,6 +17,7 @@ if (!API_KEY) {
 }
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(compression());
 app.use(morgan('short'));
 app.use(express.json());
 
@@ -31,6 +34,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api', validateApiKey);
+app.use('/api', cacheMiddleware);
 
 app.get('/api/doctors', async (req, res) => {
   try {
@@ -473,4 +477,5 @@ app.listen(PORT, () => {
   console.log(`\n✓ Sales Agent API running on http://localhost:${PORT}`);
   console.log(`✓ Health check: http://localhost:${PORT}/health`);
   console.log(`✓ Database: ${process.env.DB_HOST}:${process.env.DB_PORT}\n`);
+  getPool().catch((err) => console.error('DB warmup failed:', err.message));
 });
