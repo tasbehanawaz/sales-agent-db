@@ -37,13 +37,13 @@ npm run dev        # Development with nodemon
 - `GET /api/pharmacies` — List pharmacies
 
 ### Transactions
-- `GET /api/call-planning` — Call records
-- `GET /api/secondary-sales` — Sales transactions
+- `GET /api/call-planning` — Call records (`region`, `rep_id`, `from`, `to`, `limit`)
+- `GET /api/secondary-sales` — Sales transactions (`region`, `sku`, `from`, `to`, `limit`)
 
 ### Business Views
 - `GET /api/rep-performance` — Monthly rep metrics
-- `GET /api/product-trends` — Product sales trends
-- `GET /api/call-effectiveness` — Call success metrics
+- `GET /api/product-trends` — Product sales trends (`region`, `sku`, `months`, `limit`)
+- `GET /api/call-effectiveness` — Call success metrics (`region`, `tier`, `months`, `limit`)
 - `GET /api/inactive-doctors` — Doctors not called in 30+ days
 - `GET /api/at-risk-territories` — At-risk regions/reps
 - `GET /api/territory-coverage` — Territory summary

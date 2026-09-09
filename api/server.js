@@ -7,6 +7,7 @@ const { query, getPool } = require('./db');
 const { getForecast, getProductForecast, getActions } = require('./insights');
 const { optimizeResponse } = require('./optimize');
 const { cacheMiddleware } = require('./cache');
+const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -86,8 +87,24 @@ app.get('/api/pharmacies', async (req, res) => {
 
 app.get('/api/call-planning', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
-    const data = await query(`SELECT TOP (@limit) * FROM dbo.call_planning ORDER BY call_id`, { limit });
+    const limit = intParam(req.query.limit, 50, 1, 1000);
+    const region = strParam(req.query.region);
+    const params = { limit };
+    const clauses = [];
+    let fromSql = 'FROM dbo.call_planning cp';
+
+    if (region) {
+      fromSql += ' JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id';
+      addFilter(clauses, params, 'region', 'd.region = @region', region);
+    }
+    addFilter(clauses, params, 'rep_id', 'cp.rep_id = @rep_id', strParam(req.query.rep_id));
+    addFilter(clauses, params, 'from_date', 'cp.planned_date >= @from_date', dateParam(req.query.from));
+    addFilter(clauses, params, 'to_date', 'cp.planned_date <= @to_date', dateParam(req.query.to));
+
+    const data = await query(
+      `SELECT TOP (@limit) cp.* ${fromSql} ${whereSql(clauses)} ORDER BY cp.planned_date DESC`,
+      params
+    );
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -96,8 +113,24 @@ app.get('/api/call-planning', async (req, res) => {
 
 app.get('/api/secondary-sales', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 1000);
-    const data = await query(`SELECT TOP (@limit) * FROM dbo.secondary_sales ORDER BY sale_id`, { limit });
+    const limit = intParam(req.query.limit, 50, 1, 1000);
+    const sku = strParam(req.query.sku);
+    const params = { limit };
+    const clauses = [];
+    let fromSql = 'FROM dbo.secondary_sales ss';
+
+    if (sku) {
+      fromSql += ' JOIN dbo.products p ON ss.product_id = p.product_id';
+      addFilter(clauses, params, 'sku', 'p.sku = @sku', sku);
+    }
+    addFilter(clauses, params, 'region', 'ss.region = @region', strParam(req.query.region));
+    addFilter(clauses, params, 'from_date', 'ss.sale_date >= @from_date', dateParam(req.query.from));
+    addFilter(clauses, params, 'to_date', 'ss.sale_date <= @to_date', dateParam(req.query.to));
+
+    const data = await query(
+      `SELECT TOP (@limit) ss.* ${fromSql} ${whereSql(clauses)} ORDER BY ss.sale_date DESC`,
+      params
+    );
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -149,6 +182,13 @@ app.get('/api/rep-performance', async (req, res) => {
 
 app.get('/api/product-trends', async (req, res) => {
   try {
+    const months = intParam(req.query.months, 12, 1, 24);
+    const limit = intParam(req.query.limit, 200, 1, 1000);
+    const params = { months, limit };
+    const clauses = [];
+    addFilter(clauses, params, 'region', 'm.region = @region', strParam(req.query.region));
+    addFilter(clauses, params, 'sku', 'p.sku = @sku', strParam(req.query.sku));
+
     const data = await query(`
       WITH as_of AS (
         SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales
@@ -164,10 +204,10 @@ app.get('/api/product-trends', async (req, res) => {
           COUNT(DISTINCT ss.rep_id) AS rep_count
         FROM dbo.secondary_sales ss
         CROSS JOIN as_of a
-        WHERE ss.sale_date > DATEADD(YEAR, -1, a.d)
+        WHERE ss.sale_date > DATEADD(MONTH, -@months, a.d)
         GROUP BY ss.product_id, ss.region, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
       )
-      SELECT
+      SELECT TOP (@limit)
         p.product_id,
         p.sku,
         p.brand,
@@ -180,8 +220,9 @@ app.get('/api/product-trends', async (req, res) => {
         m.rep_count
       FROM monthly m
       JOIN dbo.products p ON p.product_id = m.product_id
+      ${whereSql(clauses)}
       ORDER BY m.month DESC, p.sku, m.region
-    `);
+    `, params);
     const optimized = optimizeResponse(data, 'financial');
     res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {
@@ -191,6 +232,13 @@ app.get('/api/product-trends', async (req, res) => {
 
 app.get('/api/call-effectiveness', async (req, res) => {
   try {
+    const months = intParam(req.query.months, 12, 1, 24);
+    const limit = intParam(req.query.limit, 200, 1, 1000);
+    const params = { months, limit };
+    const clauses = [];
+    addFilter(clauses, params, 'region', 'cs.region = @region', strParam(req.query.region));
+    addFilter(clauses, params, 'tier', 'cs.tier = @tier', strParam(req.query.tier));
+
     // Call stats from calls+doctors only. Post-call sales use same calendar
     // month as the visit (not a 30-day range join against 329k sales rows).
     const data = await query(`
@@ -209,7 +257,7 @@ app.get('/api/call-effectiveness', async (req, res) => {
         FROM dbo.call_planning cp
         JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id
         CROSS JOIN as_of a
-        WHERE cp.planned_date > DATEADD(YEAR, -1, a.d)
+        WHERE cp.planned_date > DATEADD(MONTH, -@months, a.d)
         GROUP BY d.tier, d.region, d.market, DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1)
       ),
       sales_m AS (
@@ -221,7 +269,7 @@ app.get('/api/call-effectiveness', async (req, res) => {
           COUNT(*) AS sales_count
         FROM dbo.secondary_sales ss
         CROSS JOIN as_of a
-        WHERE ss.sale_date > DATEADD(YEAR, -1, a.d)
+        WHERE ss.sale_date > DATEADD(MONTH, -@months, a.d)
         GROUP BY ss.rep_id, ss.product_id, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
       ),
       post_sales AS (
@@ -240,10 +288,10 @@ app.get('/api/call-effectiveness', async (req, res) => {
           AND s.month = DATEFROMPARTS(YEAR(cp.actual_call_date), MONTH(cp.actual_call_date), 1)
         CROSS JOIN as_of a
         WHERE cp.actual_call_date IS NOT NULL
-          AND cp.planned_date > DATEADD(YEAR, -1, a.d)
+          AND cp.planned_date > DATEADD(MONTH, -@months, a.d)
         GROUP BY d.tier, d.region, d.market, DATEFROMPARTS(YEAR(cp.planned_date), MONTH(cp.planned_date), 1)
       )
-      SELECT
+      SELECT TOP (@limit)
         cs.tier,
         cs.region,
         cs.market,
@@ -263,8 +311,9 @@ app.get('/api/call-effectiveness', async (req, res) => {
         AND cs.region = ps.region
         AND cs.market = ps.market
         AND cs.month = ps.month
+      ${whereSql(clauses)}
       ORDER BY cs.month DESC, cs.region, cs.tier
-    `);
+    `, params);
     const optimized = optimizeResponse(data, 'callData');
     res.json({ success: true, count: optimized.length, data: optimized });
   } catch (err) {

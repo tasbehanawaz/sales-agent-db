@@ -135,17 +135,18 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/call-planning?limit=50",
+              "raw": "{{base_url}}/api/call-planning?limit=50&region=South",
               "host": ["{{base_url}}"],
               "path": ["api", "call-planning"],
               "query": [
-                {
-                  "key": "limit",
-                  "value": "50"
-                }
+                { "key": "limit", "value": "50" },
+                { "key": "region", "value": "South", "disabled": true },
+                { "key": "rep_id", "value": "", "disabled": true },
+                { "key": "from", "value": "2025-01-01", "disabled": true },
+                { "key": "to", "value": "2025-12-31", "disabled": true }
               ]
             },
-            "description": "Get call planning records"
+            "description": "Get call planning records. Filters: region, rep_id, from, to, limit."
           }
         },
         {
@@ -154,17 +155,18 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/secondary-sales?limit=50",
+              "raw": "{{base_url}}/api/secondary-sales?limit=50&region=South",
               "host": ["{{base_url}}"],
               "path": ["api", "secondary-sales"],
               "query": [
-                {
-                  "key": "limit",
-                  "value": "50"
-                }
+                { "key": "limit", "value": "50" },
+                { "key": "region", "value": "South", "disabled": true },
+                { "key": "sku", "value": "", "disabled": true },
+                { "key": "from", "value": "2025-01-01", "disabled": true },
+                { "key": "to", "value": "2025-12-31", "disabled": true }
               ]
             },
-            "description": "Get secondary sales records"
+            "description": "Get secondary sales records. Filters: region, sku, from, to, limit."
           }
         }
       ]
@@ -191,11 +193,17 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/product-trends",
+              "raw": "{{base_url}}/api/product-trends?region=South&months=3",
               "host": ["{{base_url}}"],
-              "path": ["api", "product-trends"]
+              "path": ["api", "product-trends"],
+              "query": [
+                { "key": "region", "value": "South", "disabled": true },
+                { "key": "sku", "value": "", "disabled": true },
+                { "key": "months", "value": "3", "disabled": true },
+                { "key": "limit", "value": "200", "disabled": true }
+              ]
             },
-            "description": "Get product sales trends by region and month"
+            "description": "Get product sales trends. Filters: region, sku, months (default 12), limit (default 200)."
           }
         },
         {
@@ -204,11 +212,17 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/call-effectiveness",
+              "raw": "{{base_url}}/api/call-effectiveness?region=South&tier=A&months=3",
               "host": ["{{base_url}}"],
-              "path": ["api", "call-effectiveness"]
+              "path": ["api", "call-effectiveness"],
+              "query": [
+                { "key": "region", "value": "South", "disabled": true },
+                { "key": "tier", "value": "A", "disabled": true },
+                { "key": "months", "value": "3", "disabled": true },
+                { "key": "limit", "value": "200", "disabled": true }
+              ]
             },
-            "description": "Get call success metrics by doctor tier"
+            "description": "Get call success metrics. Filters: region, tier, months (default 12), limit (default 200)."
           }
         },
         {
