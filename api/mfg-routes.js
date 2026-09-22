@@ -4,10 +4,18 @@
  */
 
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const { query } = require('./db');
 const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
 
 const MFG_DB = process.env.DB_NAME_MFG || 'manufacturing_agent_demo';
+const reportsDir = path.join(__dirname, 'reports', 'generated');
+
+// Create reports directory if it doesn't exist
+if (!fs.existsSync(reportsDir)) {
+  fs.mkdirSync(reportsDir, { recursive: true });
+}
 
 // ============= DIMENSION ENDPOINTS =============
 
@@ -417,6 +425,248 @@ async function getQualityTrends(req, res) {
   }
 }
 
+// ============= REPORT GENERATION =============
+
+const ReportGenerator = require('./reports/reportGenerator');
+
+async function generateReport(req, res) {
+  try {
+    const reportType = strParam(req.query.report_type);
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+    const plantId = strParam(req.query.plant_id);
+
+    if (!reportType) {
+      return res.status(400).json({ success: false, error: 'report_type parameter required' });
+    }
+
+    let reportData = {};
+
+    // Fetch data based on report type
+    switch (reportType) {
+      case 'oee-dashboard':
+        reportData = await getOEEReportData(fromDate, toDate, plantId);
+        break;
+      case 'downtime-analysis':
+        reportData = await getDowntimeReportData(fromDate, toDate, plantId);
+        break;
+      case 'quality-trends':
+        reportData = await getQualityReportData(fromDate, toDate, plantId);
+        break;
+      case 'cost-analysis':
+        reportData = await getCostReportData(fromDate, toDate, plantId);
+        break;
+      case 'executive-summary':
+        reportData = await getExecutiveReportData(fromDate, toDate, plantId);
+        break;
+      default:
+        return res.status(400).json({ success: false, error: `Unknown report type: ${reportType}` });
+    }
+
+    // Generate PPTX
+    const generator = new ReportGenerator(reportType, reportData);
+    const prs = await generator.generateReport();
+
+    // Save to persistent reports directory
+    const filename = `mfg-${reportType}_${Date.now()}.pptx`;
+    const filepath = path.join(reportsDir, filename);
+    await prs.writeFile({ fileName: filepath });
+
+    // Return download link
+    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
+
+    res.json({
+      success: true,
+      report_type: reportType,
+      filename: filename,
+      download_url: downloadUrl,
+      message: 'Manufacturing report generated successfully. Use download_url to download.'
+    });
+  } catch (err) {
+    console.error('Report generation error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// Helper functions to fetch report-specific data
+async function getOEEReportData(fromDate, toDate, plantId) {
+  let sql = `SELECT
+    AVG(availability_pct) as overall_availability,
+    AVG(performance_pct) as overall_performance,
+    AVG(quality_pct) as overall_quality,
+    AVG(oee_pct) as overall
+  FROM [${MFG_DB}].dbo.production_runs WHERE 1=1`;
+
+  const params = {};
+  if (fromDate) sql += ` AND date >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND date <= @to_date`, params.to_date = toDate;
+  if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
+
+  const summary = await query(sql, params);
+
+  // Get top lines
+  let lineSql = `SELECT TOP 10
+    pl.line_name,
+    AVG(pr.oee_pct) as oee_pct
+  FROM [${MFG_DB}].dbo.production_runs pr
+  JOIN [${MFG_DB}].dbo.production_lines pl ON pr.line_id = pl.line_id
+  WHERE 1=1`;
+
+  if (fromDate) lineSql += ` AND pr.date >= @from_date`;
+  if (toDate) lineSql += ` AND pr.date <= @to_date`;
+  if (plantId) lineSql += ` AND pr.plant_id = @plant_id`;
+  lineSql += ` GROUP BY pl.line_name ORDER BY oee_pct DESC`;
+
+  const oeeByLine = await query(lineSql, params);
+
+  return {
+    oee_summary: summary[0] || {},
+    oee_by_line: oeeByLine || [],
+    top_line: oeeByLine?.[0]?.line_name || 'N/A',
+    poor_performers: oeeByLine?.filter(l => (l.oee_pct || 0) < 80).length || 0,
+  };
+}
+
+async function getDowntimeReportData(fromDate, toDate, plantId) {
+  let sql = `SELECT
+    COUNT(*) as incident_count,
+    SUM(duration_minutes) / 60.0 as total_hours,
+    AVG(duration_minutes) as avg_duration
+  FROM [${MFG_DB}].dbo.downtime_events WHERE 1=1`;
+
+  const params = {};
+  if (fromDate) sql += ` AND start_time >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND start_time <= @to_date`, params.to_date = toDate;
+  if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
+
+  const summary = await query(sql, params);
+
+  // Get top reasons
+  let reasonSql = `SELECT TOP 10
+    reason_code,
+    COUNT(*) as count,
+    SUM(duration_minutes) / 60.0 as total_hours
+  FROM [${MFG_DB}].dbo.downtime_events
+  WHERE 1=1`;
+
+  if (fromDate) reasonSql += ` AND start_time >= @from_date`;
+  if (toDate) reasonSql += ` AND start_time <= @to_date`;
+  if (plantId) reasonSql += ` AND plant_id = @plant_id`;
+  reasonSql += ` GROUP BY reason_code ORDER BY total_hours DESC`;
+
+  const topReasons = await query(reasonSql, params);
+  const totalHours = summary[0]?.total_hours || 1;
+  const reasonsWithPct = topReasons.map(r => ({ ...r, pct: (r.total_hours || 0) / totalHours }));
+
+  return {
+    summary: summary[0] || {},
+    top_reasons: reasonsWithPct || [],
+  };
+}
+
+async function getQualityReportData(fromDate, toDate, plantId) {
+  let sql = `SELECT
+    AVG(CASE WHEN produced_qty > 0 THEN (good_qty * 100.0 / produced_qty) ELSE 0 END) as avg_yield,
+    AVG(CASE WHEN produced_qty > 0 THEN (rejected_qty * 100.0 / produced_qty) ELSE 0 END) as avg_rejection,
+    SUM(good_qty) as total_good,
+    SUM(rejected_qty) as total_rejected
+  FROM [${MFG_DB}].dbo.quality_tests WHERE 1=1`;
+
+  const params = {};
+  if (fromDate) sql += ` AND date >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND date <= @to_date`, params.to_date = toDate;
+  if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
+
+  const summary = await query(sql, params);
+
+  // By product
+  let prodSql = `SELECT TOP 10
+    p.product_name,
+    AVG(CASE WHEN qt.produced_qty > 0 THEN (qt.good_qty * 100.0 / qt.produced_qty) ELSE 0 END) as yield_pct,
+    AVG(CASE WHEN qt.produced_qty > 0 THEN (qt.rejected_qty * 100.0 / qt.produced_qty) ELSE 0 END) as rejection_pct
+  FROM [${MFG_DB}].dbo.quality_tests qt
+  JOIN [${MFG_DB}].dbo.products p ON qt.product_id = p.product_id
+  WHERE 1=1`;
+
+  if (fromDate) prodSql += ` AND qt.date >= @from_date`;
+  if (toDate) prodSql += ` AND qt.date <= @to_date`;
+  if (plantId) prodSql += ` AND qt.plant_id = @plant_id`;
+  prodSql += ` GROUP BY p.product_name ORDER BY yield_pct DESC`;
+
+  const byProduct = await query(prodSql, params);
+
+  return {
+    summary: summary[0] || {},
+    by_product: byProduct || [],
+  };
+}
+
+async function getCostReportData(fromDate, toDate, plantId) {
+  let sql = `SELECT
+    AVG(actual_cost_per_unit) as avg_cost,
+    SUM(energy_cost) as energy_cost,
+    SUM(scrap_cost) as scrap_cost,
+    SUM(actual_cost_per_unit * units_produced) as total_cost
+  FROM [${MFG_DB}].dbo.cost_records WHERE 1=1`;
+
+  const params = {};
+  if (fromDate) sql += ` AND date >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND date <= @to_date`, params.to_date = toDate;
+  if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
+
+  const summary = await query(sql, params);
+
+  // By line
+  let lineSql = `SELECT TOP 10
+    pl.line_name,
+    AVG(cr.actual_cost_per_unit) as unit_cost,
+    AVG(cr.energy_kwh / NULLIF(cr.units_produced, 0)) as energy_per_unit,
+    SUM(cr.actual_cost_per_unit * cr.units_produced) as total_cost
+  FROM [${MFG_DB}].dbo.cost_records cr
+  JOIN [${MFG_DB}].dbo.production_lines pl ON cr.line_id = pl.line_id
+  WHERE 1=1`;
+
+  if (fromDate) lineSql += ` AND cr.date >= @from_date`;
+  if (toDate) lineSql += ` AND cr.date <= @to_date`;
+  if (plantId) lineSql += ` AND cr.plant_id = @plant_id`;
+  lineSql += ` GROUP BY pl.line_name ORDER BY total_cost DESC`;
+
+  const byLine = await query(lineSql, params);
+
+  return {
+    summary: summary[0] || {},
+    by_line: byLine || [],
+  };
+}
+
+async function getExecutiveReportData(fromDate, toDate, plantId) {
+  // Fetch all KPIs
+  const oeeData = await getOEEReportData(fromDate, toDate, plantId);
+  const downtimeData = await getDowntimeReportData(fromDate, toDate, plantId);
+  const qualityData = await getQualityReportData(fromDate, toDate, plantId);
+  const costData = await getCostReportData(fromDate, toDate, plantId);
+
+  return {
+    kpis: {
+      oee: oeeData.oee_summary?.overall || 0,
+      yield: qualityData.summary?.avg_yield || 0,
+      cost: costData.summary?.avg_cost || 0,
+      downtime: downtimeData.summary?.total_hours || 0,
+    },
+    top_issues: [
+      { title: 'Downtime Incidents', impact: `${downtimeData.summary?.incident_count} events` },
+      { title: 'Quality Concerns', impact: `${(qualityData.summary?.avg_rejection || 0).toFixed(1)}% rejection rate` },
+      { title: 'Cost Variance', impact: `$${(costData.summary?.avg_cost || 0).toFixed(2)}/unit` },
+    ],
+    recommended_actions: [
+      { action: 'Review top downtime drivers and implement preventive maintenance' },
+      { action: 'Investigate quality trends and implement process controls' },
+      { action: 'Analyze cost drivers and optimize line efficiency' },
+      { action: 'Schedule weekly performance review meetings' },
+    ],
+  };
+}
+
 // Export all handlers
 module.exports = {
   // Dimensions
@@ -436,5 +686,8 @@ module.exports = {
   // KPIs
   getOEEDashboard,
   getDowntimeAnalysis,
-  getQualityTrends
+  getQualityTrends,
+
+  // Reports
+  generateReport
 };

@@ -3,12 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const compression = require('compression');
+const fs = require('fs');
+const path = require('path');
 const { query, getPool } = require('./db');
 const { getForecast, getProductForecast, getActions } = require('./insights');
 const { optimizeResponse } = require('./optimize');
 const { cacheMiddleware } = require('./cache');
 const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
 const mfgRoutes = require('./mfg-routes');
+const SalesReportGenerator = require('./reports/salesReportGenerator');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -539,6 +542,107 @@ app.get('/api/mfg/costs', mfgRoutes.getCostRecords);
 app.get('/api/mfg/oee-dashboard', mfgRoutes.getOEEDashboard);
 app.get('/api/mfg/downtime-analysis', mfgRoutes.getDowntimeAnalysis);
 app.get('/api/mfg/quality-trends', mfgRoutes.getQualityTrends);
+
+// Report generation
+app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);
+
+// Ensure reports directory exists
+const reportsDir = path.join(__dirname, 'reports', 'generated');
+if (!fs.existsSync(reportsDir)) {
+  fs.mkdirSync(reportsDir, { recursive: true });
+}
+
+// Sales reports (no DB required - demo only)
+app.get('/api/sales/reports/generate', async (req, res) => {
+  try {
+    const reportType = strParam(req.query.report_type);
+
+    if (!reportType || !['sales-overview', 'doctor-distribution', 'pharmacy-network'].includes(reportType)) {
+      return res.status(400).json({ success: false, error: 'Invalid report_type (sales-overview|doctor-distribution|pharmacy-network)' });
+    }
+
+    // Demo data (for testing without manufacturing DB)
+    const demoData = {
+      'sales-overview': {
+        stats: { rep_count: 15, doctor_count: 250, pharmacy_count: 45, region_count: 6 }
+      },
+      'doctor-distribution': {
+        doctor_data: { total: 250, active: 240, regions: 6, avg_calls: 8 }
+      },
+      'pharmacy-network': {
+        pharmacy_data: { total: 45, chains: 18, independent: 27, avg_products: 120 }
+      }
+    };
+
+    const generator = new SalesReportGenerator(reportType, demoData[reportType] || {});
+    const prs = await generator.generateReport();
+
+    const filename = `${reportType}_${Date.now()}.pptx`;
+    const filepath = path.join(reportsDir, filename);
+    await prs.writeFile({ fileName: filepath });
+
+    const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/reports/download/${filename}`;
+
+    res.json({
+      success: true,
+      report_type: reportType,
+      filename: filename,
+      download_url: downloadUrl,
+      message: 'Report generated successfully. Use download_url to download.'
+    });
+  } catch (err) {
+    console.error('Report generation error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Download report file
+app.get('/api/sales/reports/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+
+    // Security: validate filename format to prevent directory traversal
+    if (!/^[a-z-]+_\d+\.pptx$/.test(filename)) {
+      return res.status(400).json({ success: false, error: 'Invalid filename format' });
+    }
+
+    const filepath = path.join(reportsDir, filename);
+
+    // Check if file exists
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ success: false, error: 'Report file not found' });
+    }
+
+    res.download(filepath, filename);
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Public download endpoint for manufacturing reports (no API key required)
+app.get('/reports/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+
+    // Security: validate filename format to prevent directory traversal
+    if (!/^mfg-[a-z-]+_\d+\.pptx$/.test(filename)) {
+      return res.status(400).json({ success: false, error: 'Invalid filename format' });
+    }
+
+    const filepath = path.join(reportsDir, filename);
+
+    // Check if file exists
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ success: false, error: 'Report file not found' });
+    }
+
+    res.download(filepath, filename);
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Endpoint not found' });
