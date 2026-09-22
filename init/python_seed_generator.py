@@ -23,7 +23,7 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 
 # Connection string
 conn_str = (
-    f'Driver={{ODBC Driver 17 for SQL Server}};'
+    f'Driver={{ODBC Driver 18 for SQL Server}};'
     f'Server={DB_HOST},{DB_PORT};'
     f'Database={DB_NAME};'
     f'UID={DB_USER};'
@@ -250,7 +250,7 @@ def generate_downtime_events(conn, dimensions):
                     'line_id': np.random.choice(dimensions['lines']),
                     'asset_id': np.random.choice(dimensions['machines']),
                     'planned_vs_unplanned': np.random.choice(['Planned', 'Unplanned']),
-                    'reason_code': f"{np.random.choice(['MECH', 'MAT', 'QC'])}-{np.random.randint(1, 10):03d}",
+                    'reason_code': f"{np.random.choice(['MECH', 'MAT', 'QC'])}-{int(np.random.randint(1, 10)):03d}",
                     'failure_mode': np.random.choice(failure_modes),
                     'category': category,
                     'comments': f'{category} event on {current.date()}'
