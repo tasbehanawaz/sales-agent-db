@@ -52,3 +52,7 @@ logs/
 
 # Docker
 .dockerignore
+
+# Generated reports (runtime files)
+api/reports/generated/*.pptx
+api/reports/generated/*.xlsx
