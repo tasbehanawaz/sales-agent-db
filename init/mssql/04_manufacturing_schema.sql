@@ -30,7 +30,7 @@ CREATE TABLE [dbo].[production_lines] (
 CREATE TABLE [dbo].[machines] (
   [asset_id] UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
   [line_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[production_lines]([line_id]) ON DELETE CASCADE,
-  [plant_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[plants]([plant_id]) ON DELETE CASCADE,
+  [plant_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[plants]([plant_id]) ON DELETE NO ACTION,
   [machine_name] NVARCHAR(255) NOT NULL,
   [machine_type] NVARCHAR(100) NOT NULL,
   [rated_capacity_units_per_hour] INT,
