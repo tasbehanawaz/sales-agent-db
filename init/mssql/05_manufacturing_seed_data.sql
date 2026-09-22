@@ -358,11 +358,11 @@ GO
 INSERT INTO [dbo].[downtime_events] ([event_start_datetime], [event_end_datetime], [duration_minutes], [plant_id], [line_id], [asset_id], [planned_vs_unplanned], [reason_code], [failure_mode], [category], [comments])
 VALUES
   -- Story 1: Asset 1 (Tablet Press #1) - repeated unplanned downtime Oct-Nov 2024
-  ('2024-10-05 08:30:00', '2024-10-05 09:45:00', 75, '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'First failure - belt needs replacement'),
-  ('2024-10-12 14:15:00', '2024-10-12 15:30:00', 75, '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'Recurring issue - temporary fix applied'),
-  ('2024-10-20 10:00:00', '2024-10-20 11:45:00', 105, '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', 'Unplanned', 'MECH-002', 'Misalignment', 'Breakdown', 'Second failure mode - bearing alignment drift'),
-  ('2024-10-28 16:30:00', '2024-10-28 18:00:00', 90, '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'Third occurrence - inadequate preventive maintenance'),
-  ('2024-11-05 09:15:00', '2024-11-05 11:00:00', 105, '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', '1aebe91a-1bb6-4272-8ebe-f5d31adcd3cc', 'Unplanned', 'MECH-003', 'Motor Fault', 'Breakdown', 'Cascading failure from repeated stress')
+  ('2024-10-05 08:30:00', '2024-10-05 09:45:00', 75, @plant1, @line1, @asset1, 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'First failure - belt needs replacement'),
+  ('2024-10-12 14:15:00', '2024-10-12 15:30:00', 75, @plant1, @line1, @asset1, 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'Recurring issue - temporary fix applied'),
+  ('2024-10-20 10:00:00', '2024-10-20 11:45:00', 105, @plant1, @line1, @asset1, 'Unplanned', 'MECH-002', 'Misalignment', 'Breakdown', 'Second failure mode - bearing alignment drift'),
+  ('2024-10-28 16:30:00', '2024-10-28 18:00:00', 90, @plant1, @line1, @asset1, 'Unplanned', 'MECH-001', 'Belt Slippage', 'Breakdown', 'Third occurrence - inadequate preventive maintenance'),
+  ('2024-11-05 09:15:00', '2024-11-05 11:00:00', 105, @plant1, @line1, @asset1, 'Unplanned', 'MECH-003', 'Motor Fault', 'Breakdown', 'Cascading failure from repeated stress')
 
 GO
 
