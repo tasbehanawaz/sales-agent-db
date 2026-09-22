@@ -1,2 +1,8 @@
+dotenv==0.9.9
+Faker==23.2.1
+numpy==2.5.3
+pandas==3.0.6
 pyodbc==5.0.1
-faker==23.2.1
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.3
+six==1.17.0

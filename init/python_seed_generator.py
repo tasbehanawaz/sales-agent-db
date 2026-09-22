@@ -28,7 +28,15 @@ conn_str = (
     f'Database={DB_NAME};'
     f'UID={DB_USER};'
     f'PWD={DB_PASSWORD};'
+    f'Encrypt=yes;'
+    f'TrustServerCertificate=yes;'
 )
+
+def convert_numpy_types(value):
+    """Convert numpy types to Python native types for SQL compatibility"""
+    if hasattr(value, 'item'):  # numpy scalar
+        return value.item()
+    return value
 
 def connect_db():
     """Create database connection"""
@@ -121,23 +129,23 @@ def generate_production_runs(conn, dimensions):
                                 good_qty = int(actual_qty * 0.92)  # Lower yield
                                 rejected_qty = actual_qty - good_qty
                                 runtime_hrs = np.random.uniform(6.5, 7.5)
-                                changeover_time = np.random.randint(80, 110)
+                                changeover_time = int(np.random.randint(80, 110))
                             else:
                                 # Normal performance
                                 planned_qty = 10000
-                                actual_qty = np.random.randint(9200, 9800)
+                                actual_qty = int(np.random.randint(9200, 9800))
                                 good_qty = int(actual_qty * 0.97)
                                 rejected_qty = actual_qty - good_qty
                                 runtime_hrs = np.random.uniform(8.0, 8.8)
-                                changeover_time = np.random.randint(35, 50)
+                                changeover_time = int(np.random.randint(35, 50))
                         else:
                             # Normal performance
                             planned_qty = 10000
-                            actual_qty = np.random.randint(9200, 9800)
+                            actual_qty = int(np.random.randint(9200, 9800))
                             good_qty = int(actual_qty * 0.97)
                             rejected_qty = actual_qty - good_qty
                             runtime_hrs = np.random.uniform(8.0, 8.8)
-                            changeover_time = np.random.randint(35, 50)
+                            changeover_time = int(np.random.randint(35, 50))
 
                         product_id = np.random.choice(dimensions['products'])
                         operator_id = np.random.choice(dimensions['operators'])
@@ -153,8 +161,8 @@ def generate_production_runs(conn, dimensions):
                             'actual_quantity': actual_qty,
                             'good_quantity': good_qty,
                             'rejected_quantity': rejected_qty,
-                            'cycle_time_minutes': round(np.random.uniform(6.0, 7.5), 2),
-                            'runtime_hours': round(runtime_hrs, 2),
+                            'cycle_time_minutes': float(round(np.random.uniform(6.0, 7.5), 2)),
+                            'runtime_hours': float(round(runtime_hrs, 2)),
                             'planned_production_time_hours': 9,
                             'changeover_time_minutes': changeover_time
                         })
@@ -173,11 +181,13 @@ def generate_production_runs(conn, dimensions):
         batch = df.iloc[i:i+batch_size]
         for _, row in batch.iterrows():
             cursor = conn.cursor()
+            # Convert numpy types to Python native types
+            values = tuple(convert_numpy_types(v) for v in row)
             cursor.execute(f"""
                 INSERT INTO dbo.production_runs
                 (date, shift, plant_id, line_id, product_id, operator_id, planned_quantity, actual_quantity, good_quantity, rejected_quantity, cycle_time_minutes, runtime_hours, planned_production_time_hours, changeover_time_minutes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, tuple(row))
+            """, values)
             cursor.close()
 
     print(f"✓ Inserted {len(records)} production records")
@@ -239,21 +249,21 @@ def generate_downtime_events(conn, dimensions):
     while current <= end_date:
         if np.random.random() < 0.05:  # 5% chance of downtime event
             if current.weekday() < 5:  # Weekdays only
-                duration = np.random.randint(30, 180)
+                duration = int(np.random.randint(30, 180))
                 category = np.random.choice(categories)
 
                 records.append({
                     'event_start_datetime': current,
                     'event_end_datetime': current + timedelta(minutes=duration),
                     'duration_minutes': duration,
-                    'plant_id': np.random.choice(dimensions['plants']),
-                    'line_id': np.random.choice(dimensions['lines']),
-                    'asset_id': np.random.choice(dimensions['machines']),
-                    'planned_vs_unplanned': np.random.choice(['Planned', 'Unplanned']),
+                    'plant_id': str(np.random.choice(dimensions['plants'])),
+                    'line_id': str(np.random.choice(dimensions['lines'])),
+                    'asset_id': str(np.random.choice(dimensions['machines'])),
+                    'planned_vs_unplanned': str(np.random.choice(['Planned', 'Unplanned'])),
                     'reason_code': f"{np.random.choice(['MECH', 'MAT', 'QC'])}-{int(np.random.randint(1, 10)):03d}",
-                    'failure_mode': np.random.choice(failure_modes),
-                    'category': category,
-                    'comments': f'{category} event on {current.date()}'
+                    'failure_mode': str(np.random.choice(failure_modes)),
+                    'category': str(category),
+                    'comments': f'{str(category)} event on {current.date()}'
                 })
 
         current += timedelta(days=1)
@@ -263,13 +273,25 @@ def generate_downtime_events(conn, dimensions):
     cursor = conn.cursor()
 
     for row in records:
+        # Convert numpy types to Python native types
+        values = (
+            convert_numpy_types(row['event_start_datetime']),
+            convert_numpy_types(row['event_end_datetime']),
+            convert_numpy_types(row['duration_minutes']),
+            convert_numpy_types(row['plant_id']),
+            convert_numpy_types(row['line_id']),
+            convert_numpy_types(row['asset_id']),
+            convert_numpy_types(row['planned_vs_unplanned']),
+            convert_numpy_types(row['reason_code']),
+            convert_numpy_types(row['failure_mode']),
+            convert_numpy_types(row['category']),
+            convert_numpy_types(row['comments'])
+        )
         cursor.execute(f"""
             INSERT INTO dbo.downtime_events
             (event_start_datetime, event_end_datetime, duration_minutes, plant_id, line_id, asset_id, planned_vs_unplanned, reason_code, failure_mode, category, comments)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (row['event_start_datetime'], row['event_end_datetime'], row['duration_minutes'],
-              row['plant_id'], row['line_id'], row['asset_id'], row['planned_vs_unplanned'],
-              row['reason_code'], row['failure_mode'], row['category'], row['comments']))
+        """, values)
 
     cursor.close()
     print(f"✓ Inserted {len(records)} downtime records")
