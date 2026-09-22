@@ -512,11 +512,16 @@ async function generateReport(req, res) {
 
 // Helper functions to fetch report-specific data
 async function getOEEReportData(fromDate, toDate, plantId) {
+  // OEE metrics are computed — production_runs has no oee_pct column
   let sql = `SELECT
-    AVG(availability_pct) as overall_availability,
-    AVG(performance_pct) as overall_performance,
-    AVG(quality_pct) as overall_quality,
-    AVG(oee_pct) as overall
+    AVG(CASE WHEN planned_quantity > 0
+      THEN CAST(actual_quantity AS FLOAT) / planned_quantity * 100 ELSE NULL END) as overall_availability,
+    AVG(CASE WHEN planned_quantity > 0
+      THEN CAST(actual_quantity AS FLOAT) / planned_quantity * 100 ELSE NULL END) as overall_performance,
+    AVG(CASE WHEN actual_quantity > 0
+      THEN CAST(good_quantity AS FLOAT) / actual_quantity * 100 ELSE NULL END) as overall_quality,
+    AVG(CASE WHEN planned_quantity > 0
+      THEN CAST(good_quantity AS FLOAT) / planned_quantity * 100 ELSE NULL END) as overall
   FROM [${MFG_DB}].dbo.production_runs WHERE 1=1`;
 
   const params = {};
@@ -526,10 +531,10 @@ async function getOEEReportData(fromDate, toDate, plantId) {
 
   const summary = await query(sql, params);
 
-  // Get top lines
   let lineSql = `SELECT TOP 10
     pl.line_name,
-    AVG(pr.oee_pct) as oee_pct
+    CAST(AVG(CASE WHEN pr.planned_quantity > 0
+      THEN CAST(pr.good_quantity AS FLOAT) / pr.planned_quantity * 100 ELSE NULL END) AS DECIMAL(10,2)) as oee_pct
   FROM [${MFG_DB}].dbo.production_runs pr
   JOIN [${MFG_DB}].dbo.production_lines pl ON pr.line_id = pl.line_id
   WHERE 1=1`;
@@ -545,7 +550,7 @@ async function getOEEReportData(fromDate, toDate, plantId) {
     oee_summary: summary[0] || {},
     oee_by_line: oeeByLine || [],
     top_line: oeeByLine?.[0]?.line_name || 'N/A',
-    poor_performers: oeeByLine?.filter(l => (l.oee_pct || 0) < 80).length || 0,
+    poor_performers: oeeByLine?.filter(l => (Number(l.oee_pct) || 0) < 80).length || 0,
   };
 }
 
@@ -553,32 +558,34 @@ async function getDowntimeReportData(fromDate, toDate, plantId) {
   let sql = `SELECT
     COUNT(*) as incident_count,
     SUM(duration_minutes) / 60.0 as total_hours,
-    AVG(duration_minutes) as avg_duration
+    AVG(CAST(duration_minutes AS FLOAT)) as avg_duration
   FROM [${MFG_DB}].dbo.downtime_events WHERE 1=1`;
 
   const params = {};
-  if (fromDate) sql += ` AND start_time >= @from_date`, params.from_date = fromDate;
-  if (toDate) sql += ` AND start_time <= @to_date`, params.to_date = toDate;
+  if (fromDate) sql += ` AND CAST(event_start_datetime AS DATE) >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND CAST(event_start_datetime AS DATE) <= @to_date`, params.to_date = toDate;
   if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
 
   const summary = await query(sql, params);
 
-  // Get top reasons
   let reasonSql = `SELECT TOP 10
-    reason_code,
+    ISNULL(failure_mode, ISNULL(reason_code, category)) as reason_code,
     COUNT(*) as count,
     SUM(duration_minutes) / 60.0 as total_hours
   FROM [${MFG_DB}].dbo.downtime_events
   WHERE 1=1`;
 
-  if (fromDate) reasonSql += ` AND start_time >= @from_date`;
-  if (toDate) reasonSql += ` AND start_time <= @to_date`;
+  if (fromDate) reasonSql += ` AND CAST(event_start_datetime AS DATE) >= @from_date`;
+  if (toDate) reasonSql += ` AND CAST(event_start_datetime AS DATE) <= @to_date`;
   if (plantId) reasonSql += ` AND plant_id = @plant_id`;
-  reasonSql += ` GROUP BY reason_code ORDER BY total_hours DESC`;
+  reasonSql += ` GROUP BY ISNULL(failure_mode, ISNULL(reason_code, category)) ORDER BY total_hours DESC`;
 
   const topReasons = await query(reasonSql, params);
-  const totalHours = summary[0]?.total_hours || 1;
-  const reasonsWithPct = topReasons.map(r => ({ ...r, pct: (r.total_hours || 0) / totalHours }));
+  const totalHours = Number(summary[0]?.total_hours) || 1;
+  const reasonsWithPct = (topReasons || []).map(r => ({
+    ...r,
+    pct: (Number(r.total_hours) || 0) / totalHours
+  }));
 
   return {
     summary: summary[0] || {},
@@ -587,11 +594,14 @@ async function getDowntimeReportData(fromDate, toDate, plantId) {
 }
 
 async function getQualityReportData(fromDate, toDate, plantId) {
+  // quality_tests uses produced_quantity / rejected_quantity (no good_qty column)
   let sql = `SELECT
-    AVG(CASE WHEN produced_qty > 0 THEN (good_qty * 100.0 / produced_qty) ELSE 0 END) as avg_yield,
-    AVG(CASE WHEN produced_qty > 0 THEN (rejected_qty * 100.0 / produced_qty) ELSE 0 END) as avg_rejection,
-    SUM(good_qty) as total_good,
-    SUM(rejected_qty) as total_rejected
+    AVG(CASE WHEN produced_quantity > 0
+      THEN ((produced_quantity - rejected_quantity) * 100.0 / produced_quantity) ELSE 0 END) as avg_yield,
+    AVG(CASE WHEN produced_quantity > 0
+      THEN (rejected_quantity * 100.0 / produced_quantity) ELSE 0 END) as avg_rejection,
+    SUM(produced_quantity - rejected_quantity) as total_good,
+    SUM(rejected_quantity) as total_rejected
   FROM [${MFG_DB}].dbo.quality_tests WHERE 1=1`;
 
   const params = {};
@@ -601,11 +611,12 @@ async function getQualityReportData(fromDate, toDate, plantId) {
 
   const summary = await query(sql, params);
 
-  // By product
   let prodSql = `SELECT TOP 10
     p.product_name,
-    AVG(CASE WHEN qt.produced_qty > 0 THEN (qt.good_qty * 100.0 / qt.produced_qty) ELSE 0 END) as yield_pct,
-    AVG(CASE WHEN qt.produced_qty > 0 THEN (qt.rejected_qty * 100.0 / qt.produced_qty) ELSE 0 END) as rejection_pct
+    AVG(CASE WHEN qt.produced_quantity > 0
+      THEN ((qt.produced_quantity - qt.rejected_quantity) * 100.0 / qt.produced_quantity) ELSE 0 END) as yield_pct,
+    AVG(CASE WHEN qt.produced_quantity > 0
+      THEN (qt.rejected_quantity * 100.0 / qt.produced_quantity) ELSE 0 END) as rejection_pct
   FROM [${MFG_DB}].dbo.quality_tests qt
   JOIN [${MFG_DB}].dbo.products p ON qt.product_id = p.product_id
   WHERE 1=1`;
