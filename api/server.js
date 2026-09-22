@@ -12,6 +12,8 @@ const { cacheMiddleware } = require('./cache');
 const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
 const mfgRoutes = require('./mfg-routes');
 const SalesReportGenerator = require('./reports/salesReportGenerator');
+const swaggerUi = require('swagger-ui-express');
+const { swaggerSpec } = require('./swagger');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -37,6 +39,26 @@ const validateApiKey = (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+const SWAGGER_ENABLED = (process.env.SWAGGER_ENABLED || 'true').toLowerCase() !== 'false';
+const SWAGGER_ROUTE = process.env.SWAGGER_ROUTE || '/docs';
+const SWAGGER_JSON_ROUTE = process.env.SWAGGER_JSON_ROUTE || `${SWAGGER_ROUTE}.json`;
+
+if (SWAGGER_ENABLED) {
+  app.get(SWAGGER_JSON_ROUTE, (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+  app.use(
+    SWAGGER_ROUTE,
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      explorer: true,
+      customSiteTitle: 'Sales & Manufacturing Agent API',
+      swaggerOptions: { url: SWAGGER_JSON_ROUTE, persistAuthorization: true },
+    })
+  );
+}
 
 app.use('/api', validateApiKey);
 app.use('/api', cacheMiddleware);
@@ -651,6 +673,10 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`\n✓ Sales Agent API running on http://localhost:${PORT}`);
   console.log(`✓ Health check: http://localhost:${PORT}/health`);
+  if (SWAGGER_ENABLED) {
+    console.log(`✓ Swagger UI:   http://localhost:${PORT}${SWAGGER_ROUTE}`);
+    console.log(`✓ Swagger JSON: http://localhost:${PORT}${SWAGGER_JSON_ROUTE}`);
+  }
   console.log(`✓ Database: ${process.env.DB_HOST}:${process.env.DB_PORT}\n`);
   getPool().catch((err) => console.error('DB warmup failed:', err.message));
 });
