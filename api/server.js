@@ -8,6 +8,7 @@ const { getForecast, getProductForecast, getActions } = require('./insights');
 const { optimizeResponse } = require('./optimize');
 const { cacheMiddleware } = require('./cache');
 const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
+const mfgRoutes = require('./mfg-routes');
 
 const app = express();
 const PORT = process.env.API_PORT || 3000;
@@ -517,6 +518,27 @@ app.get('/api/stats', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// ============= MANUFACTURING ENDPOINTS =============
+
+// Dimension endpoints
+app.get('/api/mfg/plants', mfgRoutes.getPlants);
+app.get('/api/mfg/production-lines', mfgRoutes.getProductionLines);
+app.get('/api/mfg/machines', mfgRoutes.getMachines);
+app.get('/api/mfg/products', mfgRoutes.getProducts);
+
+// Fact table endpoints
+app.get('/api/mfg/production-runs', mfgRoutes.getProductionRuns);
+app.get('/api/mfg/downtime-events', mfgRoutes.getDowntimeEvents);
+app.get('/api/mfg/quality-tests', mfgRoutes.getQualityTests);
+app.get('/api/mfg/maintenance-records', mfgRoutes.getMaintenanceRecords);
+app.get('/api/mfg/inventory', mfgRoutes.getInventory);
+app.get('/api/mfg/costs', mfgRoutes.getCostRecords);
+
+// KPI endpoints
+app.get('/api/mfg/oee-dashboard', mfgRoutes.getOEEDashboard);
+app.get('/api/mfg/downtime-analysis', mfgRoutes.getDowntimeAnalysis);
+app.get('/api/mfg/quality-trends', mfgRoutes.getQualityTrends);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Endpoint not found' });
