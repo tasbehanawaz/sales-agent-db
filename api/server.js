@@ -23,7 +23,11 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+const corsOrigins = (process.env.CORS_ORIGIN || '*')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins.includes('*') ? '*' : corsOrigins }));
 app.use(compression());
 app.use(morgan('short'));
 app.use(express.json());
