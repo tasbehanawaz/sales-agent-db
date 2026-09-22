@@ -100,7 +100,7 @@ CREATE TABLE [dbo].[production_runs] (
   [plant_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[plants]([plant_id]) ON DELETE NO ACTION,
   [line_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[production_lines]([line_id]) ON DELETE CASCADE,
   [product_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[products]([product_id]) ON DELETE NO ACTION,
-  [operator_id] UNIQUEIDENTIFIER REFERENCES [dbo].[operators]([operator_id]),
+  [operator_id] UNIQUEIDENTIFIER REFERENCES [dbo].[operators]([operator_id]) ON DELETE NO ACTION,
   [planned_quantity] INT NOT NULL,
   [actual_quantity] INT NOT NULL,
   [good_quantity] INT NOT NULL,
@@ -121,7 +121,7 @@ CREATE TABLE [dbo].[downtime_events] (
   [duration_minutes] INT NOT NULL,
   [plant_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[plants]([plant_id]) ON DELETE NO ACTION,
   [line_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[production_lines]([line_id]) ON DELETE CASCADE,
-  [asset_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[machines]([asset_id]) ON DELETE CASCADE,
+  [asset_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[machines]([asset_id]) ON DELETE NO ACTION,
   [planned_vs_unplanned] NVARCHAR(50) CHECK ([planned_vs_unplanned] IN ('Planned', 'Unplanned')),
   [reason_code] NVARCHAR(100),
   [failure_mode] NVARCHAR(255),
@@ -153,7 +153,7 @@ CREATE TABLE [dbo].[quality_tests] (
 -- 5. MAINTENANCE
 CREATE TABLE [dbo].[maintenance_records] (
   [maintenance_id] UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-  [asset_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[machines]([asset_id]) ON DELETE CASCADE,
+  [asset_id] UNIQUEIDENTIFIER NOT NULL REFERENCES [dbo].[machines]([asset_id]) ON DELETE NO ACTION,
   [work_order_id] NVARCHAR(100) UNIQUE,
   [maintenance_type] NVARCHAR(50) CHECK ([maintenance_type] IN ('Preventive', 'Corrective', 'Emergency')),
   [failure_date] DATE,
