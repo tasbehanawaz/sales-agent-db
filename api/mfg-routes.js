@@ -7,7 +7,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { query } = require('./db');
-const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
+const { intParam, strParam, dateParam, uuidParams, addFilter, whereSql } = require('./queryParams');
 
 const MFG_DB = process.env.DB_NAME_MFG || 'manufacturing_agent_demo';
 const reportsDir = path.join(__dirname, 'reports', 'generated');
@@ -30,7 +30,10 @@ async function getPlants(req, res) {
 
 async function getProductionLines(req, res) {
   try {
-    const plantId = strParam(req.query.plant_id);
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
+
     let sql = `SELECT pl.*, p.plant_name FROM [${MFG_DB}].dbo.production_lines pl
                JOIN [${MFG_DB}].dbo.plants p ON pl.plant_id = p.plant_id`;
     const params = {};
@@ -54,8 +57,11 @@ async function getProductionLines(req, res) {
 
 async function getMachines(req, res) {
   try {
-    const lineId = strParam(req.query.line_id);
+    const ids = uuidParams(req.query, ['line_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const lineId = ids.values.line_id;
     const criticality = strParam(req.query.criticality);
+
     let sql = `SELECT m.*, l.line_name, p.plant_name FROM [${MFG_DB}].dbo.machines m
                JOIN [${MFG_DB}].dbo.production_lines l ON m.line_id = l.line_id
                JOIN [${MFG_DB}].dbo.plants p ON m.plant_id = p.plant_id`;
@@ -95,9 +101,9 @@ async function getProducts(req, res) {
 async function getProductionRuns(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const plantId = strParam(req.query.plant_id);
-    const lineId = strParam(req.query.line_id);
-    const productId = strParam(req.query.product_id);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id', 'product_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId, product_id: productId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
     const shift = strParam(req.query.shift);
@@ -133,8 +139,9 @@ async function getProductionRuns(req, res) {
 async function getDowntimeEvents(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const plantId = strParam(req.query.plant_id);
-    const lineId = strParam(req.query.line_id);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId } = ids.values;
     const category = strParam(req.query.category);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
@@ -169,8 +176,9 @@ async function getDowntimeEvents(req, res) {
 async function getQualityTests(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const lineId = strParam(req.query.line_id);
-    const productId = strParam(req.query.product_id);
+    const ids = uuidParams(req.query, ['line_id', 'product_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { line_id: lineId, product_id: productId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -203,7 +211,9 @@ async function getQualityTests(req, res) {
 async function getMaintenanceRecords(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const assetId = strParam(req.query.asset_id);
+    const ids = uuidParams(req.query, ['asset_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const assetId = ids.values.asset_id;
     const maintType = strParam(req.query.maintenance_type);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
@@ -235,7 +245,9 @@ async function getMaintenanceRecords(req, res) {
 async function getInventory(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const plantId = strParam(req.query.plant_id);
+    const ids = uuidParams(req.query, ['plant_id', 'material_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, material_id: materialId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -249,6 +261,7 @@ async function getInventory(req, res) {
     const clauses = [];
 
     if (plantId) addFilter(clauses, params, 'plant_id', 'inv.plant_id = @plant_id', plantId);
+    if (materialId) addFilter(clauses, params, 'material_id', 'inv.material_id = @material_id', materialId);
     if (fromDate) addFilter(clauses, params, 'from_date', 'inv.date >= @from_date', fromDate);
     if (toDate) addFilter(clauses, params, 'to_date', 'inv.date <= @to_date', toDate);
 
@@ -267,8 +280,9 @@ async function getInventory(req, res) {
 async function getCostRecords(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const lineId = strParam(req.query.line_id);
-    const productId = strParam(req.query.product_id);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id', 'product_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId, product_id: productId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -281,6 +295,7 @@ async function getCostRecords(req, res) {
     const params = { limit };
     const clauses = [];
 
+    if (plantId) addFilter(clauses, params, 'plant_id', 'cr.plant_id = @plant_id', plantId);
     if (lineId) addFilter(clauses, params, 'line_id', 'cr.line_id = @line_id', lineId);
     if (productId) addFilter(clauses, params, 'product_id', 'cr.product_id = @product_id', productId);
     if (fromDate) addFilter(clauses, params, 'from_date', 'cr.date >= @from_date', fromDate);
@@ -302,7 +317,9 @@ async function getCostRecords(req, res) {
 
 async function getOEEDashboard(req, res) {
   try {
-    const plantId = strParam(req.query.plant_id);
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -345,7 +362,9 @@ async function getOEEDashboard(req, res) {
 
 async function getDowntimeAnalysis(req, res) {
   try {
-    const plantId = strParam(req.query.plant_id);
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -385,8 +404,9 @@ async function getDowntimeAnalysis(req, res) {
 
 async function getQualityTrends(req, res) {
   try {
-    const plantId = strParam(req.query.plant_id);
-    const productId = strParam(req.query.product_id);
+    const ids = uuidParams(req.query, ['plant_id', 'product_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, product_id: productId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -434,7 +454,9 @@ async function generateReport(req, res) {
     const reportType = strParam(req.query.report_type);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
-    const plantId = strParam(req.query.plant_id);
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
 
     if (!reportType) {
       return res.status(400).json({ success: false, error: 'report_type parameter required' });

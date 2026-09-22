@@ -86,8 +86,9 @@ curl -H "X-API-Key: sk_prod_..." \
 
 ### Generate Downtime Report (Specific Plant)
 ```bash
+# plant_id must be a UUID from GET /api/mfg/plants (not "PLANT-001")
 curl -H "X-API-Key: sk_prod_..." \
-  "http://localhost:3000/api/mfg/reports/generate?report_type=downtime-analysis&plant_id=PLANT-001&from=2026-09-01&to=2026-09-30"
+  "http://localhost:3000/api/mfg/reports/generate?report_type=downtime-analysis&plant_id=<PLANT_UUID>&from=2026-09-01&to=2026-09-30"
 ```
 
 ### Generate Executive Summary (All Data)

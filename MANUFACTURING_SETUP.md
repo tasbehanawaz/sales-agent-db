@@ -163,28 +163,49 @@ curl -H "X-API-Key: sk_prod_..." \
 
 ## 🔧 API Usage Examples
 
-### Get Production Runs for a Line
+IDs (`plant_id`, `line_id`, `product_id`, `asset_id`, `material_id`) are **UUIDs**, not codes like `PLANT-001`. Fetch them from dimension endpoints first.
+
+### 1. Resolve real IDs
 ```bash
-curl -H "X-API-Key: sk_prod_..." \
-  "https://api-vertx.gigh.com/api/mfg/production-runs?line_id=LINE-ID&from=2024-09-01&to=2026-09-30"
+# Get plant_id
+curl -H "X-API-Key: sk_prod_..." "https://api-vertx.gigh.com/api/mfg/plants"
+
+# Get line_id (optionally filter by plant)
+curl -H "X-API-Key: sk_prod_..." "https://api-vertx.gigh.com/api/mfg/production-lines"
+
+# Get product_id / asset_id
+curl -H "X-API-Key: sk_prod_..." "https://api-vertx.gigh.com/api/mfg/products"
+curl -H "X-API-Key: sk_prod_..." "https://api-vertx.gigh.com/api/mfg/machines"
 ```
 
-### Get Downtime Analysis (Pareto)
+### 2. Get Production Runs for a Line
 ```bash
 curl -H "X-API-Key: sk_prod_..." \
-  "https://api-vertx.gigh.com/api/mfg/downtime-analysis?plant_id=PLANT-ID&from=2024-09-01&to=2026-09-30"
+  "https://api-vertx.gigh.com/api/mfg/production-runs?line_id=<LINE_UUID>&from=2024-09-01&to=2026-09-30"
 ```
 
-### Get OEE Dashboard
+### 3. Get Downtime Analysis (Pareto)
 ```bash
 curl -H "X-API-Key: sk_prod_..." \
-  "https://api-vertx.gigh.com/api/mfg/oee-dashboard?plant_id=PLANT-ID"
+  "https://api-vertx.gigh.com/api/mfg/downtime-analysis?plant_id=<PLANT_UUID>&from=2024-09-01&to=2026-09-30"
 ```
 
-### Get Quality Trends
+### 4. Get OEE Dashboard
 ```bash
 curl -H "X-API-Key: sk_prod_..." \
-  "https://api-vertx.gigh.com/api/mfg/quality-trends?product_id=PRODUCT-ID&from=2024-09-01&to=2026-09-30"
+  "https://api-vertx.gigh.com/api/mfg/oee-dashboard?plant_id=<PLANT_UUID>&from=2024-09-01&to=2026-09-30"
+```
+
+### 5. Get Quality Trends
+```bash
+curl -H "X-API-Key: sk_prod_..." \
+  "https://api-vertx.gigh.com/api/mfg/quality-trends?product_id=<PRODUCT_UUID>&from=2024-09-01&to=2026-09-30"
+```
+
+Date-only queries (no ID filters) also work, e.g.:
+```bash
+curl -H "X-API-Key: sk_prod_..." \
+  "https://api-vertx.gigh.com/api/mfg/production-runs?from=2024-09-01&to=2026-09-30&limit=100"
 ```
 
 ---
