@@ -107,8 +107,8 @@ def generate_additional_operators(conn):
     shifts = ['Morning', 'Evening', 'Night']
     certifications = ['Level 1', 'Level 2', 'Level 3', 'Supervisor', 'Lead']
 
-    # Generate 40-50 operators
-    for i in range(45):
+    # Generate 80-100 operators for comprehensive plant coverage
+    for i in range(95):
         plant_id = np.random.choice(plants)
 
         records.append({
@@ -160,8 +160,8 @@ def generate_additional_materials(conn):
         'Acetone', 'Epoxy Resin', 'Polyurethane', 'Fiberglass Mat', 'Lubricating Oil'
     ]
 
-    # Generate 30-40 materials
-    for i in range(35):
+    # Generate 60-80 materials for comprehensive supplier coverage
+    for i in range(70):
         records.append({
             'material_name': f"{np.random.choice(material_types)} (Grade-{i+1})",
             'supplier_id': np.random.choice(suppliers)
@@ -214,9 +214,9 @@ def generate_additional_downtime_events(conn):
                      'Electrical Failure', 'Hydraulic Leak', 'Temperature Alarm', 'Vibration Alert']
     reason_codes = ['MECH-001', 'MECH-002', 'MECH-003', 'ELEC-001', 'ELEC-002', 'MAT-001', 'MAT-002', 'QC-001']
 
-    # Generate more frequent downtime events (10% chance instead of 5%)
+    # Generate more frequent downtime events (20% chance per day for comprehensive 2-year coverage)
     while current <= end_date:
-        if np.random.random() < 0.10:
+        if np.random.random() < 0.20:  # 20% chance per day (increased from 10%)
             if current.weekday() < 5:
                 duration = int(np.random.randint(30, 180))
                 category = np.random.choice(categories)
@@ -282,11 +282,11 @@ def generate_audit_logs(conn):
               'inventory_transactions', 'cost_records']
     users = ['system', 'admin', 'operator', 'scheduler', 'batch_job', 'data_loader']
 
-    # Generate ~3000-4000 audit log entries spread across the timeline
+    # Generate 5000+ audit log entries spread across the entire 2-year timeline
     current = start_date
     while current <= end_date:
-        if np.random.random() < 0.3:  # 30% chance per day
-            for _ in range(np.random.randint(2, 8)):  # 2-8 operations per day
+        if np.random.random() < 0.5:  # 50% chance per day (increased from 30%)
+            for _ in range(np.random.randint(5, 15)):  # 5-15 operations per day (increased from 2-8)
                 records.append({
                     'table_name': np.random.choice(tables),
                     'operation': np.random.choice(operations),

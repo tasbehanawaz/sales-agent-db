@@ -74,6 +74,91 @@ def get_dimension_ids(conn):
     cursor.close()
     return dimensions
 
+def generate_production_runs(conn, dimensions):
+    """Generate production run records (daily/shift level)"""
+    print("\n📊 Generating production run records...")
+
+    start_date = datetime(2024, 9, 1)
+    end_date = datetime(2026, 9, 30)
+    shifts = ['Morning', 'Evening', 'Night']
+
+    records = []
+    current_date = start_date
+
+    cursor = conn.cursor()
+    line_map = {}
+
+    # Get machine-to-line mapping
+    machine_lines = cursor.execute("SELECT asset_id, line_id FROM dbo.machines").fetchall()
+    for machine, line in machine_lines:
+        line_map[machine] = line
+
+    # Generate data - one record per shift per line per day
+    record_id = 0
+    while current_date <= end_date:
+        if current_date.weekday() < 5:  # Weekdays only
+            cursor.execute(f"SELECT is_planned_shutdown FROM dbo.calendar WHERE date = '{current_date.date()}'")
+            result = cursor.fetchone()
+
+            if result is None or result[0] == 0:  # Not a shutdown
+                # Generate records for ALL lines and shifts
+                for line_id in dimensions['lines']:
+                    for shift in shifts:
+                        record_id += 1
+
+                        planned_qty = 10000
+                        actual_qty = int(np.random.randint(9200, 9800))
+                        good_qty = int(actual_qty * 0.97)
+                        rejected_qty = actual_qty - good_qty
+
+                        records.append({
+                            'date': current_date.date(),
+                            'shift': shift,
+                            'plant_id': dimensions['plants'][0],
+                            'line_id': line_id,
+                            'product_id': np.random.choice(dimensions['products']),
+                            'operator_id': np.random.choice(dimensions['operators']) if dimensions['operators'] else None,
+                            'planned_quantity': planned_qty,
+                            'actual_quantity': actual_qty,
+                            'good_quantity': good_qty,
+                            'rejected_quantity': rejected_qty,
+                            'cycle_time_minutes': float(round(np.random.uniform(6.0, 7.5), 2)),
+                            'runtime_hours': float(round(np.random.uniform(8.0, 8.8), 2)),
+                            'planned_production_time_hours': 9,
+                            'changeover_time_minutes': int(np.random.randint(35, 50))
+                        })
+
+        current_date += timedelta(days=1)
+
+    print(f"  Inserting {len(records)} production run records...")
+
+    for row in records:
+        values = (
+            convert_numpy_types(row['date']),
+            convert_numpy_types(row['shift']),
+            convert_numpy_types(row['plant_id']),
+            convert_numpy_types(row['line_id']),
+            convert_numpy_types(row['product_id']),
+            convert_numpy_types(row['operator_id']),
+            convert_numpy_types(row['planned_quantity']),
+            convert_numpy_types(row['actual_quantity']),
+            convert_numpy_types(row['good_quantity']),
+            convert_numpy_types(row['rejected_quantity']),
+            convert_numpy_types(row['cycle_time_minutes']),
+            convert_numpy_types(row['runtime_hours']),
+            convert_numpy_types(row['planned_production_time_hours']),
+            convert_numpy_types(row['changeover_time_minutes'])
+        )
+        cursor.execute(f"""
+            INSERT INTO dbo.production_runs
+            (date, shift, plant_id, line_id, product_id, operator_id, planned_quantity, actual_quantity, good_quantity, rejected_quantity, cycle_time_minutes, runtime_hours, planned_production_time_hours, changeover_time_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, values)
+
+    cursor.close()
+    print(f"✓ Inserted {len(records)} production records")
+    return len(records)
+
 def generate_quality_tests(conn, dimensions):
     """Generate quality test records for batches"""
     print("\n🧪 Generating quality test records...")
@@ -92,8 +177,8 @@ def generate_quality_tests(conn, dimensions):
 
     while current <= end_date:
         if current.weekday() < 5:  # Weekdays only
-            for line_id in dimensions['lines'][:5]:
-                if np.random.random() < 0.8:
+            for line_id in dimensions['lines']:  # ALL lines for comprehensive coverage
+                if np.random.random() < 0.95:  # 95% chance per line per day
                     produced_qty = int(np.random.randint(5000, 15000))
 
                     pass_rate = np.random.uniform(0.94, 0.99)
@@ -165,7 +250,7 @@ def generate_maintenance_records(conn, dimensions):
     ]
 
     while current <= end_date:
-        if np.random.random() < 0.15:
+        if np.random.random() < 0.25:  # 25% chance per day (increased from 15%)
             asset_id = np.random.choice(dimensions['machines'])
 
             duration_hours = np.random.uniform(1, 8)
@@ -240,7 +325,7 @@ def generate_inventory_transactions(conn, dimensions):
     while current <= end_date:
         if current.weekday() < 5:
             for material_id in dimensions['materials']:
-                if np.random.random() < 0.6:
+                if np.random.random() < 0.85:  # 85% chance per material per day (increased from 60%)
                     opening_stock = inventory_levels[material_id]
 
                     if np.random.random() < 0.7:
@@ -319,8 +404,8 @@ def generate_cost_records(conn, dimensions):
 
     while current <= end_date:
         if current.weekday() < 5:
-            for line_id in dimensions['lines'][:5]:
-                if np.random.random() < 0.8:
+            for line_id in dimensions['lines']:  # ALL lines for comprehensive coverage
+                if np.random.random() < 0.95:  # 95% chance per line per day
                     units = int(np.random.randint(5000, 12000))
                     labor_cost = float(round(units * np.random.uniform(2, 5), 2))
                     maintenance_cost = float(round(np.random.uniform(500, 3000), 2))
@@ -393,6 +478,7 @@ def main():
         print("\n📂 Fetching dimensions...")
         dimensions = get_dimension_ids(conn)
 
+        prod_count = generate_production_runs(conn, dimensions)
         quality_count = generate_quality_tests(conn, dimensions)
         maintenance_count = generate_maintenance_records(conn, dimensions)
         inventory_count = generate_inventory_transactions(conn, dimensions)
@@ -401,11 +487,12 @@ def main():
         print("\n" + "=" * 60)
         print("✓ Missing Data Generation Complete!")
         print("=" * 60)
+        print(f"Production Runs:       {prod_count:,}")
         print(f"Quality Tests:         {quality_count:,}")
         print(f"Maintenance Records:   {maintenance_count:,}")
         print(f"Inventory Transactions: {inventory_count:,}")
         print(f"Cost Records:          {cost_count:,}")
-        print(f"\nTotal Records Added:   {quality_count + maintenance_count + inventory_count + cost_count:,}")
+        print(f"\nTotal Records Added:   {prod_count + quality_count + maintenance_count + inventory_count + cost_count:,}")
         print("=" * 60)
 
     except Exception as e:

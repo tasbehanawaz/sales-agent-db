@@ -17,7 +17,7 @@ load_dotenv()
 # Database connection
 DB_HOST = os.getenv('DB_HOST', '34.88.207.18')
 DB_PORT = int(os.getenv('DB_PORT', '1433'))
-DB_NAME = 'manufacturing_agent_demo'
+DB_NAME = os.getenv('DB_NAME_MFG', 'manufacturing_agent_demo')
 DB_USER = os.getenv('DB_USER', 'sales@dmin')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 
