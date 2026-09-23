@@ -74,8 +74,17 @@ services:
       start_period: 20s
     mem_limit: 512m
     cpus: "0.5"
+    # Run as the host UID/GID so bind-mounted files on the host stay owned by
+    # the deploying user and the container process (which is not root — see
+    # USER node in the Dockerfile) can still write to them. Defaults to 1000,
+    # which matches both the `node` user in node:alpine and a typical Linux
+    # login user, so most hosts don't need to set APP_UID/APP_GID.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
-      - ./api/reports/generated:/app/api/reports/generated
+      # Container path must match reportsDir in api/mfg-routes.js, which
+      # resolves to /app/reports/generated (WORKDIR=/app, code sits directly
+      # under it because the build context is ./api).
+      - ./api/reports/generated:/app/reports/generated
     networks:
       - sales-agent-net
 
