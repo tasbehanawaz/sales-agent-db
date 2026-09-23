@@ -71,6 +71,9 @@ def get_dimension_ids(conn):
     dimensions['materials'] = [row[0] for row in cursor.execute("SELECT material_id FROM dbo.materials").fetchall()]
     print(f"✓ Found {len(dimensions['materials'])} materials")
 
+    dimensions['operators'] = [row[0] for row in cursor.execute("SELECT operator_id FROM dbo.operators").fetchall()]
+    print(f"✓ Found {len(dimensions['operators'])} operators")
+
     cursor.close()
     return dimensions
 
@@ -117,7 +120,7 @@ def generate_production_runs(conn, dimensions):
                             'plant_id': dimensions['plants'][0],
                             'line_id': line_id,
                             'product_id': np.random.choice(dimensions['products']),
-                            'operator_id': np.random.choice(dimensions['operators']) if dimensions['operators'] else None,
+                            'operator_id': np.random.choice(dimensions['operators']) if (dimensions['operators'] and len(dimensions['operators']) > 0) else None,
                             'planned_quantity': planned_qty,
                             'actual_quantity': actual_qty,
                             'good_quantity': good_qty,
