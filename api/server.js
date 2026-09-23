@@ -16,6 +16,9 @@ const swaggerUi = require('swagger-ui-express');
 const { swaggerSpec } = require('./swagger');
 
 const app = express();
+// Honor X-Forwarded-Proto/Host from the nginx reverse proxy so req.protocol
+// reflects the original https scheme, not the plaintext hop into the container.
+app.set('trust proxy', true);
 const PORT = process.env.API_PORT || 3000;
 const API_KEY = process.env.API_KEY;
 if (!API_KEY) {
