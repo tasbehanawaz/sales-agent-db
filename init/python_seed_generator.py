@@ -200,7 +200,7 @@ def generate_downtime_events(conn, dimensions):
     cursor = conn.cursor()
 
     # Get Story 1 asset (first machine on first line)
-    cursor.execute("SELECT asset_id FROM dbo.machines LIMIT 1")
+    cursor.execute("SELECT TOP 1 asset_id FROM dbo.machines")
     story_asset = cursor.fetchone()[0]
 
     cursor.execute("SELECT line_id FROM dbo.machines WHERE asset_id = ?", (story_asset,))
