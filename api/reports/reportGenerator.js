@@ -126,6 +126,8 @@ class ReportGenerator {
           return await this.generateCostReport();
         case 'executive-summary':
           return await this.generateExecutiveReport();
+        case 'query-driven':
+          return await this.generateQueryDrivenReport();
         default:
           throw new Error(`Unknown report type: ${this.reportType}`);
       }
@@ -337,6 +339,97 @@ class ReportGenerator {
         });
       });
     });
+
+    return this.prs;
+  }
+
+  async generateQueryDrivenReport() {
+    const title = this.data.title || 'Manufacturing Report';
+    const topics = (this.data.topics || []).join(', ') || 'custom';
+    const queryHint = this.filters?.query ? String(this.filters.query) : '';
+    const subtitle = queryHint
+      ? (queryHint.length > 90 ? `${queryHint.slice(0, 87)}…` : queryHint)
+      : `Topics: ${topics}`;
+
+    this.addTitleSlide(title, subtitle);
+
+    if (Array.isArray(this.data.kpis) && this.data.kpis.length) {
+      this.addContentSlide('Overview', (slide) => {
+        this.data.kpis.slice(0, 4).forEach((kpi, i) => {
+          this.addKPIBox(
+            slide,
+            0.5 + i * 2.1,
+            0.9,
+            kpi.label || '',
+            String(kpi.value ?? ''),
+            kpi.unit || '',
+            kpi.color || 'primary'
+          );
+        });
+      });
+    }
+
+    for (const section of this.data.sections || []) {
+      this.addContentSlide(section.title || 'Section', (slide) => {
+        let y = 0.9;
+        if (Array.isArray(section.kpis) && section.kpis.length) {
+          section.kpis.slice(0, 4).forEach((kpi, i) => {
+            this.addKPIBox(
+              slide,
+              0.5 + i * 2.1,
+              y,
+              kpi.label || '',
+              String(kpi.value ?? ''),
+              kpi.unit || '',
+              kpi.color || 'primary'
+            );
+          });
+          y = 2.3;
+        }
+        if (section.table && section.table.headers && section.table.rows?.length) {
+          const tableData = [
+            section.table.headers,
+            ...section.table.rows.slice(0, 8).map((row) => row.map((c) => String(c ?? ''))),
+          ];
+          this.addTable(slide, 0.5, y, 8, Math.min(4.5, 0.4 + tableData.length * 0.4), tableData);
+        } else if (Array.isArray(section.bullets) && section.bullets.length) {
+          section.bullets.slice(0, 6).forEach((b, i) => {
+            slide.addText(`• ${b}`, {
+              x: 0.8, y: y + i * 0.55, w: 8, h: 0.5,
+              ...styleConfig.fonts.body,
+            });
+          });
+        }
+      });
+    }
+
+    if (this.data.is_executive && (this.data.top_issues || []).length) {
+      this.addContentSlide('Top Issues (Priority)', (slide) => {
+        (this.data.top_issues || []).slice(0, 5).forEach((issue, i) => {
+          slide.addText(`${i + 1}. ${issue.title || 'Issue'}`, {
+            x: 0.8, y: 1.0 + (i * 0.8), w: 8, h: 0.7,
+            ...styleConfig.fonts.body,
+            bold: true,
+          });
+          slide.addText(`   Impact: ${issue.impact || 'N/A'}`, {
+            x: 1.0, y: 1.45 + (i * 0.8), w: 7.5, h: 0.3,
+            ...styleConfig.fonts.small,
+          });
+        });
+      });
+    }
+
+    const actions = this.data.recommended_actions || [];
+    if (actions.length) {
+      this.addContentSlide('Recommended Actions', (slide) => {
+        actions.slice(0, 4).forEach((action, i) => {
+          slide.addText(`✓ ${action.action || String(action)}`, {
+            x: 0.8, y: 1.0 + (i * 1.0), w: 8, h: 0.9,
+            ...styleConfig.fonts.body,
+          });
+        });
+      });
+    }
 
     return this.prs;
   }

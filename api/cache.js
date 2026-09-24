@@ -4,6 +4,9 @@ const store = new Map();
 function cacheMiddleware(req, res, next) {
   if (req.method !== 'GET') return next();
 
+  // Never cache report generation — each call must create a fresh file
+  if (/\/reports\/generate/.test(req.path)) return next();
+
   const key = req.originalUrl;
   const hit = store.get(key);
   if (hit && hit.expires > Date.now()) {

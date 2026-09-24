@@ -21,7 +21,23 @@ if (!fs.existsSync(reportsDir)) {
 
 async function getPlants(req, res) {
   try {
-    const data = await query(`SELECT * FROM [${MFG_DB}].dbo.plants ORDER BY plant_name`, {});
+    const limit = intParam(req.query.limit, 100, 1, 1000);
+    const region = strParam(req.query.region);
+
+    const params = { limit };
+    const clauses = [];
+    let sql = `SELECT TOP (@limit) * FROM [${MFG_DB}].dbo.plants WHERE 1=1`;
+
+    if (region) {
+      addFilter(clauses, params, 'region', 'region = @region', region);
+    }
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+    sql += ` ORDER BY plant_name`;
+
+    const data = await query(sql, params);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -89,7 +105,23 @@ async function getMachines(req, res) {
 
 async function getProducts(req, res) {
   try {
-    const data = await query(`SELECT * FROM [${MFG_DB}].dbo.products ORDER BY product_name`, {});
+    const limit = intParam(req.query.limit, 100, 1, 1000);
+    const category = strParam(req.query.category);
+
+    const params = { limit };
+    const clauses = [];
+    let sql = `SELECT TOP (@limit) * FROM [${MFG_DB}].dbo.products WHERE 1=1`;
+
+    if (category) {
+      addFilter(clauses, params, 'category', 'category = @category', category);
+    }
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+    sql += ` ORDER BY product_name`;
+
+    const data = await query(sql, params);
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -317,11 +349,12 @@ async function getCostRecords(req, res) {
 
 async function getOEEDashboard(req, res) {
   try {
-    const ids = uuidParams(req.query, ['plant_id']);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
     if (ids.error) return res.status(400).json({ success: false, error: ids.error });
-    const plantId = ids.values.plant_id;
+    const { plant_id: plantId, line_id: lineId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
+    const shift = strParam(req.query.shift);
 
     let sql = `
       SELECT
@@ -344,6 +377,8 @@ async function getOEEDashboard(req, res) {
     const clauses = [];
 
     if (plantId) addFilter(clauses, params, 'plant_id', 'pr.plant_id = @plant_id', plantId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'pr.line_id = @line_id', lineId);
+    if (shift) addFilter(clauses, params, 'shift', 'pr.shift = @shift', shift);
     if (fromDate) addFilter(clauses, params, 'from_date', 'pr.date >= @from_date', fromDate);
     if (toDate) addFilter(clauses, params, 'to_date', 'pr.date <= @to_date', toDate);
 
@@ -362,14 +397,16 @@ async function getOEEDashboard(req, res) {
 
 async function getDowntimeAnalysis(req, res) {
   try {
-    const ids = uuidParams(req.query, ['plant_id']);
+    const limit = intParam(req.query.limit, 20, 1, 100);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
     if (ids.error) return res.status(400).json({ success: false, error: ids.error });
-    const plantId = ids.values.plant_id;
+    const { plant_id: plantId, line_id: lineId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
+    const category = strParam(req.query.category);
 
     let sql = `
-      SELECT TOP 20
+      SELECT TOP (@limit)
         de.category,
         de.failure_mode,
         COUNT(*) as event_count,
@@ -382,10 +419,12 @@ async function getDowntimeAnalysis(req, res) {
       JOIN [${MFG_DB}].dbo.machines m ON de.asset_id = m.asset_id
     `;
 
-    const params = {};
+    const params = { limit };
     const clauses = [];
 
     if (plantId) addFilter(clauses, params, 'plant_id', 'de.plant_id = @plant_id', plantId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'de.line_id = @line_id', lineId);
+    if (category) addFilter(clauses, params, 'category', 'de.category = @category', category);
     if (fromDate) addFilter(clauses, params, 'from_date', 'CAST(de.event_start_datetime AS DATE) >= @from_date', fromDate);
     if (toDate) addFilter(clauses, params, 'to_date', 'CAST(de.event_start_datetime AS DATE) <= @to_date', toDate);
 
@@ -404,14 +443,15 @@ async function getDowntimeAnalysis(req, res) {
 
 async function getQualityTrends(req, res) {
   try {
-    const ids = uuidParams(req.query, ['plant_id', 'product_id']);
+    const limit = intParam(req.query.limit, 200, 1, 1000);
+    const ids = uuidParams(req.query, ['plant_id', 'product_id', 'line_id']);
     if (ids.error) return res.status(400).json({ success: false, error: ids.error });
-    const { plant_id: plantId, product_id: productId } = ids.values;
+    const { plant_id: plantId, product_id: productId, line_id: lineId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
     let sql = `
-      SELECT
+      SELECT TOP (@limit)
         qt.date,
         p.product_name,
         l.line_name,
@@ -424,11 +464,12 @@ async function getQualityTrends(req, res) {
       JOIN [${MFG_DB}].dbo.production_lines l ON qt.line_id = l.line_id
     `;
 
-    const params = {};
+    const params = { limit };
     const clauses = [];
 
     if (plantId) addFilter(clauses, params, 'plant_id', 'qt.plant_id = @plant_id', plantId);
     if (productId) addFilter(clauses, params, 'product_id', 'qt.product_id = @product_id', productId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'qt.line_id = @line_id', lineId);
     if (fromDate) addFilter(clauses, params, 'from_date', 'qt.date >= @from_date', fromDate);
     if (toDate) addFilter(clauses, params, 'to_date', 'qt.date <= @to_date', toDate);
 
@@ -448,10 +489,12 @@ async function getQualityTrends(req, res) {
 // ============= REPORT GENERATION =============
 
 const ReportGenerator = require('./reports/reportGenerator');
+const PDFReportGenerator = require('./reports/pdfReportGenerator');
 
 async function generateReport(req, res) {
   try {
     const reportType = strParam(req.query.report_type);
+    const format = strParam(req.query.format) || 'pptx';
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
     const ids = uuidParams(req.query, ['plant_id']);
@@ -485,29 +528,450 @@ async function generateReport(req, res) {
         return res.status(400).json({ success: false, error: `Unknown report type: ${reportType}` });
     }
 
-    // Generate PPTX
-    const generator = new ReportGenerator(reportType, reportData);
-    const prs = await generator.generateReport();
+    // Generate report in requested format
+    if (format === 'pdf') {
+      return await generateReportPDF(reportType, reportData, req, res, {
+        from: fromDate,
+        to: toDate,
+        plant_id: plantId,
+      });
+    } else {
+      // Default to PPTX
+      const generator = new ReportGenerator(reportType, reportData);
+      const prs = await generator.generateReport();
 
-    // Save to persistent reports directory
-    const filename = `mfg-${reportType}_${Date.now()}.pptx`;
-    const filepath = path.join(reportsDir, filename);
-    await prs.writeFile({ fileName: filepath });
+      // Save to persistent reports directory
+      const filename = `mfg-${reportType}_${Date.now()}.pptx`;
+      const filepath = path.join(reportsDir, filename);
+      await prs.writeFile({ fileName: filepath });
 
-    // Return download link
-    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
+      // Return download link
+      const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
 
-    res.json({
-      success: true,
-      report_type: reportType,
-      filename: filename,
-      download_url: downloadUrl,
-      message: 'Manufacturing report generated successfully. Use download_url to download.'
-    });
+      res.json({
+        success: true,
+        report_type: reportType,
+        format: 'pptx',
+        filename: filename,
+        download_url: downloadUrl,
+        message: 'Manufacturing report generated successfully. Use download_url to download.'
+      });
+    }
   } catch (err) {
     console.error('Report generation error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
+}
+
+async function generateReportPDF(reportType, reportData, req, res, filters = {}, extra = {}) {
+  try {
+    const generator = new PDFReportGenerator(reportType, reportData, filters);
+    await generator.generateReport();
+
+    const fileSlug = extra.file_slug || reportType;
+    const filename = `mfg-${fileSlug}_${Date.now()}.pdf`;
+    const filepath = path.join(reportsDir, filename);
+
+    await generator.save(fs.createWriteStream(filepath));
+
+    // Return download link
+    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
+
+    // Don't leak file_slug into the JSON response
+    const { file_slug: _fileSlug, ...publicExtra } = extra;
+
+    res.json({
+      success: true,
+      report_type: reportType,
+      format: 'pdf',
+      filename: filename,
+      download_url: downloadUrl,
+      message: publicExtra.query
+        ? `Manufacturing report generated from query topics: ${(publicExtra.topics || []).join(', ') || 'custom'}. Use download_url to download.`
+        : 'Manufacturing report generated successfully. Use download_url to download.',
+      ...publicExtra,
+    });
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function generateReportQuery(req, res) {
+  try {
+    const userQuery = strParam(req.body.query) || strParam(req.query.query);
+    const format = strParam(req.body.format) || strParam(req.query.format) || 'pptx';
+    const fromDate = dateParam(req.body.from) || dateParam(req.query.from);
+    const toDate = dateParam(req.body.to) || dateParam(req.query.to);
+    const ids = uuidParams({ ...req.query, ...req.body }, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
+
+    if (!userQuery) {
+      return res.status(400).json({ success: false, error: 'query parameter required' });
+    }
+
+    // Analyze the user question → topics → fetch matching DB data → custom report
+    const plan = analyzeQuery(userQuery);
+    const reportData = await buildQueryDrivenReportData(plan, fromDate, toDate, plantId);
+    const reportType = 'query-driven';
+    const fileSlug = buildReportFileSlug(reportData.title || plan.title, plan.topics);
+    const filters = { from: fromDate, to: toDate, plant_id: plantId, query: userQuery };
+
+    if (format === 'pdf') {
+      return await generateReportPDF(reportType, reportData, req, res, filters, {
+        query: userQuery,
+        title: reportData.title || plan.title,
+        inferred_report_type: reportType,
+        topics: plan.topics,
+        matched_template: plan.primaryTemplate,
+        file_slug: fileSlug,
+      });
+    }
+
+    const generator = new ReportGenerator(reportType, reportData, filters);
+    const prs = await generator.generateReport();
+    const filename = `mfg-${fileSlug}_${Date.now()}.pptx`;
+    const filepath = path.join(reportsDir, filename);
+    await prs.writeFile({ fileName: filepath });
+    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
+
+    res.json({
+      success: true,
+      query: userQuery,
+      title: reportData.title || plan.title,
+      report_type: reportType,
+      inferred_report_type: reportType,
+      topics: plan.topics,
+      matched_template: plan.primaryTemplate,
+      format: 'pptx',
+      filename,
+      download_url: downloadUrl,
+      message: `Report built from DB data for topics: ${plan.topics.join(', ') || 'general'}. Use download_url to download.`,
+    });
+  } catch (err) {
+    console.error('Query-based report generation error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/** Safe filename segment from title/topics, e.g. "production-runs" */
+function buildReportFileSlug(title, topics) {
+  let base = String(title || '')
+    .replace(/\breport\b/gi, '')
+    .trim();
+  if (!base || base.length < 3) {
+    base = (topics || []).join('-') || 'custom';
+  }
+  const slug = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return slug || 'custom';
+}
+
+/**
+ * Turn a free-text question into topics we can fetch from the manufacturing DB.
+ * Multiple topics allowed (e.g. "downtime and quality").
+ */
+function analyzeQuery(query) {
+  const q = String(query || '').toLowerCase();
+  const topics = new Set();
+
+  if (/\boee\b|\bavailability\b|\bequipment effectiveness\b/.test(q)) topics.add('oee');
+  if (/\bdowntime\b|\bfailure\b|\bbreakdown\b|\bpareto\b|\bunplanned\b/.test(q)) topics.add('downtime');
+  if (/\bquality\b|\brejection\b|\byield\b|\bdefect\b|\bscrap\b/.test(q)) topics.add('quality');
+  if (/\bproducts?\b|\bsku\b|\bskus\b/.test(q)) topics.add('products');
+  if (/\bcosts?\b|\benergy\b|\blabor\b|\bunit cost\b|\bexpense\b/.test(q)) topics.add('costs');
+  if (/\bproduction runs?\b|\boutput\b|\bthroughput\b|\bgood quantity\b|\bruntime\b/.test(q)) topics.add('production');
+  if (/\bproduction lines?\b|\blines?\b/.test(q) && !/\bonline\b|\bdeadline\b/.test(q)) topics.add('lines');
+  if (/\bexecutive\b|\boverview\b|\bkpis?\b|\bdashboard\b/.test(q)) topics.add('executive');
+
+  // "report on production lines" → lines + oee/production
+  if (topics.has('lines') && !topics.has('oee') && !topics.has('production') && !topics.has('costs')) {
+    topics.add('oee');
+    topics.add('production');
+  }
+  // products without explicit quality still get quality-by-product
+  if (topics.has('products') && !topics.has('quality')) topics.add('quality');
+
+  let topicList = [...topics];
+  if (topicList.length === 0) topicList = ['executive'];
+
+  // Map to a legacy template name for messaging (closest single fit)
+  const primaryTemplate = inferReportType(query);
+
+  const title = buildReportTitleFromQuery(query, topicList);
+  return { topics: topicList, primaryTemplate, title };
+}
+
+function buildReportTitleFromQuery(query, topics) {
+  const cleaned = String(query || '')
+    .replace(/^(create|generate|make|give me|show me|build)\s+(a\s+)?/i, '')
+    .replace(/\b(pdf|pptx|powerpoint|report)\b/gi, '')
+    .replace(/^\s*(on|for|about)\s+/i, '')
+    .replace(/^\s*the\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length >= 3 && cleaned.length <= 80) {
+    const titled = cleaned.replace(/^\w/, (c) => c.toUpperCase());
+    return /report$/i.test(titled) ? titled : `${titled} Report`;
+  }
+  const labels = {
+    oee: 'OEE',
+    downtime: 'Downtime',
+    quality: 'Quality',
+    products: 'Product',
+    costs: 'Cost',
+    production: 'Production',
+    lines: 'Production Line',
+    executive: 'Executive',
+  };
+  return topics.map((t) => labels[t] || t).join(' & ') + ' Report';
+}
+
+async function buildQueryDrivenReportData(plan, fromDate, toDate, plantId) {
+  const sections = [];
+  const kpis = [];
+  const topics = plan.topics || [];
+
+  const need = (t) => topics.includes(t);
+
+  if (need('oee') || need('lines')) {
+    const oee = await getOEEReportData(fromDate, toDate, plantId);
+    const s = oee.oee_summary || {};
+    kpis.push(
+      { label: 'Overall OEE', value: `${Number(s.overall || 0).toFixed(1)}%`, color: 'primary' },
+      { label: 'Availability', value: `${Number(s.overall_availability || 0).toFixed(1)}%`, color: 'success' },
+    );
+    sections.push({
+      id: 'oee',
+      title: 'OEE / Line Performance',
+      kpis: [
+        { label: 'Overall OEE', value: `${Number(s.overall || 0).toFixed(1)}%`, color: 'primary' },
+        { label: 'Availability', value: `${Number(s.overall_availability || 0).toFixed(1)}%`, color: 'success' },
+        { label: 'Performance', value: `${Number(s.overall_performance || 0).toFixed(1)}%`, color: 'warning' },
+        { label: 'Quality', value: `${Number(s.overall_quality || 0).toFixed(1)}%`, color: 'danger' },
+      ],
+      table: {
+        headers: ['Line', 'OEE %', 'Status'],
+        rows: (oee.oee_by_line || []).slice(0, 12).map((line) => {
+          const pct = Number(line.oee_pct || 0);
+          return [line.line_name || 'N/A', `${pct.toFixed(1)}%`, pct >= 80 ? 'Good' : 'Needs Attention'];
+        }),
+        weights: [3, 1.2, 1.8],
+      },
+      bullets: [
+        `Top performing line: ${oee.top_line || 'N/A'}`,
+        `Lines below 80% OEE: ${oee.poor_performers || 0}`,
+      ],
+    });
+  }
+
+  if (need('production') || need('lines')) {
+    const prod = await getProductionReportData(fromDate, toDate, plantId);
+    const s = prod.summary || {};
+    sections.push({
+      id: 'production',
+      title: 'Production Runs / Output',
+      kpis: [
+        { label: 'Good Qty', value: Number(s.total_good || 0).toLocaleString(), color: 'success' },
+        { label: 'Actual Qty', value: Number(s.total_actual || 0).toLocaleString(), color: 'primary' },
+        { label: 'Rejected', value: Number(s.total_rejected || 0).toLocaleString(), color: 'danger' },
+        { label: 'Run Count', value: String(s.run_count || 0), color: 'neutral' },
+      ],
+      table: {
+        headers: ['Line', 'Good Qty', 'Actual Qty', 'Runs'],
+        rows: (prod.by_line || []).slice(0, 12).map((r) => [
+          r.line_name || 'N/A',
+          Number(r.good_quantity || 0).toLocaleString(),
+          Number(r.actual_quantity || 0).toLocaleString(),
+          String(r.run_count || 0),
+        ]),
+        weights: [2.5, 1.5, 1.5, 1],
+      },
+    });
+  }
+
+  if (need('downtime')) {
+    const dt = await getDowntimeReportData(fromDate, toDate, plantId);
+    const s = dt.summary || {};
+    sections.push({
+      id: 'downtime',
+      title: 'Downtime Analysis',
+      kpis: [
+        { label: 'Total Hours', value: Number(s.total_hours || 0).toFixed(1), unit: 'hrs', color: 'danger' },
+        { label: 'Incidents', value: String(s.incident_count || 0), color: 'warning' },
+        { label: 'Avg Duration', value: Number(s.avg_duration || 0).toFixed(1), unit: 'min', color: 'primary' },
+      ],
+      table: {
+        headers: ['Reason', 'Count', 'Hours', '% Total'],
+        rows: (dt.top_reasons || []).slice(0, 12).map((r) => [
+          r.reason_code || 'Unknown',
+          String(r.count || 0),
+          Number(r.total_hours || 0).toFixed(1),
+          `${(Number(r.pct || 0) * 100).toFixed(1)}%`,
+        ]),
+        weights: [3, 1, 1, 1.2],
+      },
+    });
+  }
+
+  if (need('quality') || need('products')) {
+    const q = await getQualityReportData(fromDate, toDate, plantId);
+    const s = q.summary || {};
+    sections.push({
+      id: 'quality',
+      title: need('products') ? 'Quality by Product' : 'Quality Trends',
+      kpis: [
+        { label: 'Avg Yield', value: `${Number(s.avg_yield || 0).toFixed(1)}%`, color: 'success' },
+        { label: 'Rejection', value: `${Number(s.avg_rejection || 0).toFixed(1)}%`, color: 'danger' },
+        { label: 'Good Units', value: Number(s.total_good || 0).toLocaleString(), color: 'success' },
+        { label: 'Rejected', value: Number(s.total_rejected || 0).toLocaleString(), color: 'danger' },
+      ],
+      table: {
+        headers: ['Product', 'Yield %', 'Rejection %', 'Status'],
+        rows: (q.by_product || []).slice(0, 12).map((p) => {
+          const y = Number(p.yield_pct || 0);
+          return [p.product_name || 'Unknown', `${y.toFixed(1)}%`, `${Number(p.rejection_pct || 0).toFixed(1)}%`, y >= 95 ? 'Good' : 'Review'];
+        }),
+        weights: [3.2, 1.2, 1.4, 1.2],
+      },
+    });
+  }
+
+  if (need('costs')) {
+    const c = await getCostReportData(fromDate, toDate, plantId);
+    const s = c.summary || {};
+    sections.push({
+      id: 'costs',
+      title: 'Cost Analysis',
+      kpis: [
+        { label: 'Unit Cost', value: `$${Number(s.avg_cost || 0).toFixed(2)}`, color: 'primary' },
+        { label: 'Energy', value: `$${Math.round(Number(s.energy_cost || 0)).toLocaleString()}`, color: 'warning' },
+        { label: 'Scrap', value: `$${Math.round(Number(s.scrap_cost || 0)).toLocaleString()}`, color: 'danger' },
+        { label: 'Total', value: `$${Math.round(Number(s.total_cost || 0)).toLocaleString()}`, color: 'neutral' },
+      ],
+      table: {
+        headers: ['Line', 'Unit Cost', 'Energy/Unit', 'Total'],
+        rows: (c.by_line || []).slice(0, 12).map((line) => [
+          line.line_name || 'Unknown',
+          `$${Number(line.unit_cost || 0).toFixed(2)}`,
+          `${Number(line.energy_per_unit || 0).toFixed(2)} kWh`,
+          `$${Number(line.total_cost || 0).toFixed(0)}`,
+        ]),
+        weights: [2.5, 1.3, 1.5, 1.3],
+      },
+    });
+  }
+
+  if (need('executive') && sections.length === 0) {
+    const exec = await getExecutiveReportData(fromDate, toDate, plantId);
+    return {
+      title: plan.title,
+      query: plan.title,
+      topics: topics,
+      kpis: [
+        { label: 'OEE', value: `${Number(exec.kpis?.oee || 0).toFixed(1)}%`, color: 'primary' },
+        { label: 'Yield', value: `${Number(exec.kpis?.yield || 0).toFixed(1)}%`, color: 'success' },
+        { label: 'Unit Cost', value: `$${Number(exec.kpis?.cost || 0).toFixed(2)}`, color: 'warning' },
+        { label: 'Downtime', value: `${Number(exec.kpis?.downtime || 0).toFixed(0)}`, unit: 'hrs', color: 'danger' },
+      ],
+      sections: [],
+      top_issues: exec.top_issues || [],
+      recommended_actions: exec.recommended_actions || [],
+      is_executive: true,
+    };
+  }
+
+  return {
+    title: plan.title,
+    topics,
+    kpis: kpis.slice(0, 4),
+    sections,
+    top_issues: [],
+    recommended_actions: [
+      { action: `Review the ${topics.join(', ')} metrics above and prioritize outliers` },
+      { action: 'Compare against prior period and investigate largest gaps' },
+    ],
+    is_executive: false,
+  };
+}
+
+async function getProductionReportData(fromDate, toDate, plantId) {
+  let sql = `SELECT
+    COUNT(*) as run_count,
+    SUM(good_quantity) as total_good,
+    SUM(actual_quantity) as total_actual,
+    SUM(rejected_quantity) as total_rejected,
+    SUM(planned_quantity) as total_planned
+  FROM [${MFG_DB}].dbo.production_runs WHERE 1=1`;
+
+  const params = {};
+  if (fromDate) sql += ` AND date >= @from_date`, params.from_date = fromDate;
+  if (toDate) sql += ` AND date <= @to_date`, params.to_date = toDate;
+  if (plantId) sql += ` AND plant_id = @plant_id`, params.plant_id = plantId;
+
+  const summary = await query(sql, params);
+
+  let lineSql = `SELECT TOP 12
+    pl.line_name,
+    SUM(pr.good_quantity) as good_quantity,
+    SUM(pr.actual_quantity) as actual_quantity,
+    COUNT(*) as run_count
+  FROM [${MFG_DB}].dbo.production_runs pr
+  JOIN [${MFG_DB}].dbo.production_lines pl ON pr.line_id = pl.line_id
+  WHERE 1=1`;
+  if (fromDate) lineSql += ` AND pr.date >= @from_date`;
+  if (toDate) lineSql += ` AND pr.date <= @to_date`;
+  if (plantId) lineSql += ` AND pr.plant_id = @plant_id`;
+  lineSql += ` GROUP BY pl.line_name ORDER BY good_quantity DESC`;
+
+  const byLine = await query(lineSql, params);
+  return { summary: summary[0] || {}, by_line: byLine || [] };
+}
+
+function inferReportType(query) {
+  const q = String(query || '').toLowerCase();
+
+  const scores = {
+    'oee-dashboard': 0,
+    'downtime-analysis': 0,
+    'quality-trends': 0,
+    'cost-analysis': 0,
+    'executive-summary': 0,
+  };
+
+  const bump = (type, n = 1) => { scores[type] += n; };
+
+  if (/\boee\b/.test(q)) bump('oee-dashboard', 5);
+  if (/\bavailability\b|\bequipment effectiveness\b/.test(q)) bump('oee-dashboard', 3);
+  if (/\bproduction lines?\b|\blines?\b/.test(q) && !/\bonline\b/.test(q)) bump('oee-dashboard', 4);
+  if (/\bproduction runs?\b|\boutput\b|\bthroughput\b|\bruntime\b/.test(q)) bump('oee-dashboard', 4);
+
+  if (/\bdowntime\b/.test(q)) bump('downtime-analysis', 5);
+  if (/\bfailure\b|\bbreakdown\b|\bpareto\b|\bunplanned\b|\broot cause\b/.test(q)) bump('downtime-analysis', 3);
+
+  if (/\bquality\b|\brejection\b|\byield\b|\bdefect\b|\bscrap\b/.test(q)) bump('quality-trends', 5);
+  if (/\bproducts?\b|\bsku\b|\bskus\b|\bbrand\b/.test(q)) bump('quality-trends', 4);
+
+  if (/\bcosts?\b|\benergy\b|\blabor\b|\bunit cost\b|\bexpense\b/.test(q)) bump('cost-analysis', 5);
+
+  if (/\bexecutive\b|\boverview\b|\bkpi\b|\bdashboard summary\b/.test(q)) bump('executive-summary', 4);
+  if (/\bsummary\b/.test(q) && !/\bproducts?\b|\bquality\b|\bdowntime\b|\boee\b|\bcost\b|\blines?\b|\bproduction\b/.test(q)) {
+    bump('executive-summary', 2);
+  }
+
+  let best = 'executive-summary';
+  let bestScore = 0;
+  for (const [type, score] of Object.entries(scores)) {
+    if (score > bestScore) {
+      bestScore = score;
+      best = type;
+    }
+  }
+  return bestScore > 0 ? best : 'executive-summary';
 }
 
 // Helper functions to fetch report-specific data
@@ -722,5 +1186,6 @@ module.exports = {
   getQualityTrends,
 
   // Reports
-  generateReport
+  generateReport,
+  generateReportQuery
 };

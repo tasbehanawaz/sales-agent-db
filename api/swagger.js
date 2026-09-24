@@ -66,7 +66,7 @@ const spec = {
     { name: 'Manufacturing - Dimensions', description: 'Plants, lines, machines, products' },
     { name: 'Manufacturing - Facts', description: 'Production, downtime, quality, maintenance, inventory, cost' },
     { name: 'Manufacturing - KPIs', description: 'OEE, downtime analysis, quality trends' },
-    { name: 'Manufacturing - Reports', description: 'PPTX report generation and downloads' },
+    { name: 'Manufacturing - Reports', description: 'PPTX/PDF report generation and downloads' },
   ],
   components: {
     securitySchemes: {
@@ -109,6 +109,23 @@ const spec = {
         properties: {
           success: { type: 'boolean', example: true },
           report_type: { type: 'string' },
+          format: { type: 'string', enum: ['pptx', 'pdf'], description: 'Output format of the report' },
+          filename: { type: 'string' },
+          download_url: { type: 'string', format: 'uri' },
+          message: { type: 'string' },
+        },
+      },
+      QueryReportResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          query: { type: 'string', description: 'User query that was processed' },
+          title: { type: 'string', description: 'Report title derived from the query' },
+          report_type: { type: 'string', example: 'query-driven', description: 'Always query-driven for this endpoint' },
+          inferred_report_type: { type: 'string', description: 'Same as report_type (query-driven)' },
+          topics: { type: 'array', items: { type: 'string' }, description: 'DB topics used to build the report' },
+          matched_template: { type: 'string', description: 'Closest legacy template name (for reference only)' },
+          format: { type: 'string', enum: ['pptx', 'pdf'], description: 'Output format of the report' },
           filename: { type: 'string' },
           download_url: { type: 'string', format: 'uri' },
           message: { type: 'string' },
@@ -458,21 +475,25 @@ const spec = {
     '/reports/download/{filename}': {
       get: {
         tags: ['Manufacturing - Reports'],
-        summary: 'Download a generated manufacturing report (no auth)',
+        summary: 'Download a generated manufacturing report (PPTX or PDF, no auth)',
         security: [],
         parameters: [
           {
             in: 'path',
             name: 'filename',
             required: true,
-            schema: { type: 'string', pattern: '^mfg-[a-z-]+_\\d+\\.pptx$' },
+            schema: { type: 'string', pattern: '^mfg-[a-z-]+_\\d+\\.(pptx|pdf)$' },
+            description: 'Generated report filename (mfg-{type}_{timestamp}.pptx or .pdf)',
           },
         ],
         responses: {
           200: {
-            description: 'PPTX file download',
+            description: 'Report file download (PPTX or PDF)',
             content: {
               'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
+                schema: { type: 'string', format: 'binary' },
+              },
+              'application/pdf': {
                 schema: { type: 'string', format: 'binary' },
               },
             },
@@ -680,7 +701,7 @@ const spec = {
     '/api/mfg/reports/generate': {
       get: {
         tags: ['Manufacturing - Reports'],
-        summary: 'Generate a manufacturing PPTX report',
+        summary: 'Generate a manufacturing report (PPTX or PDF)',
         parameters: [
           {
             in: 'query',
@@ -690,8 +711,15 @@ const spec = {
               type: 'string',
               enum: ['oee-dashboard', 'downtime-analysis', 'quality-trends', 'cost-analysis', 'executive-summary'],
             },
+            description: 'Type of manufacturing report to generate',
           },
-          { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+          {
+            in: 'query',
+            name: 'format',
+            schema: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx' },
+            description: 'Output format: pptx (PowerPoint) or pdf',
+          },
+          { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant UUID' },
           ...dateRangeParams,
         ],
         responses: {
@@ -699,6 +727,75 @@ const spec = {
             description: 'Report generated',
             content: {
               'application/json': { schema: { $ref: '#/components/schemas/ReportGenerateResponse' } },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/mfg/reports/generate-query': {
+      get: {
+        tags: ['Manufacturing - Reports'],
+        summary: 'Generate report from natural language query',
+        description: 'Analyzes the query for topics (OEE, downtime, quality, products, costs, production runs, lines), fetches matching DB data, and builds a custom report — not limited to the 5 fixed templates',
+        parameters: [
+          {
+            in: 'query',
+            name: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Natural language query (e.g., "show me OEE trends", "what about downtime")',
+          },
+          {
+            in: 'query',
+            name: 'format',
+            schema: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx' },
+            description: 'Output format: pptx (PowerPoint) or pdf',
+          },
+          { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant UUID' },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: {
+            description: 'Report generated with inferred type',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/QueryReportResponse' } },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+      post: {
+        tags: ['Manufacturing - Reports'],
+        summary: 'Generate report from natural language query (POST)',
+        description: 'Same as GET: builds a custom DB-backed report from query topics (not limited to the 5 fixed templates)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['query'],
+                properties: {
+                  query: { type: 'string', description: 'Natural language query' },
+                  format: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx', description: 'Output format' },
+                  plant_id: { type: 'string', format: 'uuid', description: 'Filter by plant UUID' },
+                  from: { type: 'string', format: 'date', description: 'Start date (YYYY-MM-DD)' },
+                  to: { type: 'string', format: 'date', description: 'End date (YYYY-MM-DD)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Report generated with inferred type',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/QueryReportResponse' } },
             },
           },
           400: { $ref: '#/components/responses/BadRequest' },

@@ -574,6 +574,9 @@ app.get('/api/mfg/quality-trends', mfgRoutes.getQualityTrends);
 
 // Report generation
 app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);
+// Query-based report generation (supports format parameter: pptx or pdf)
+app.post('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
+app.get('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
 
 // Ensure reports directory exists
 const reportsDir = path.join(__dirname, 'reports', 'generated');
@@ -655,7 +658,7 @@ app.get('/reports/download/:filename', (req, res) => {
     const filename = req.params.filename;
 
     // Security: validate filename format to prevent directory traversal
-    if (!/^mfg-[a-z-]+_\d+\.pptx$/.test(filename)) {
+    if (!/^mfg-[a-z-]+_\d+\.(pptx|pdf)$/.test(filename)) {
       return res.status(400).json({ success: false, error: 'Invalid filename format' });
     }
 
