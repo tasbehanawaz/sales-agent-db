@@ -232,7 +232,9 @@ const spec = {
         tags: ['Sales - Analytics'],
         summary: 'Product monthly trends',
         parameters: [
-          { in: 'query', name: 'months', schema: { type: 'integer', minimum: 1, maximum: 24, default: 12 } },
+          { in: 'query', name: 'start_date', schema: { type: 'string', format: 'date' }, description: 'Start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'end_date', schema: { type: 'string', format: 'date' }, description: 'End date (YYYY-MM-DD)' },
+          { in: 'query', name: 'months', schema: { type: 'integer', minimum: 1, maximum: 24, default: 12 }, description: 'Fallback if start_date/end_date not provided' },
           { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 1000, default: 200 } },
           { in: 'query', name: 'region', schema: { type: 'string' } },
           { in: 'query', name: 'sku', schema: { type: 'string' } },
@@ -334,6 +336,10 @@ const spec = {
       get: {
         tags: ['Sales - Insights'],
         summary: 'Aggregate sales forecast',
+        parameters: [
+          { in: 'query', name: 'start_date', schema: { type: 'string', format: 'date' }, description: 'Start date (YYYY-MM-DD)' },
+          { in: 'query', name: 'end_date', schema: { type: 'string', format: 'date' }, description: 'End date (YYYY-MM-DD)' },
+        ],
         responses: {
           200: {
             description: 'Success',
@@ -601,6 +607,7 @@ const spec = {
     },
     '/api/mfg/quality-tests': {
       get: commonListPath('List quality tests', '', 'Manufacturing - Facts', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant (NEW)' },
         { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
         { in: 'query', name: 'product_id', schema: { type: 'string', format: 'uuid' } },
         ...dateRangeParams,
@@ -608,6 +615,8 @@ const spec = {
     },
     '/api/mfg/maintenance-records': {
       get: commonListPath('List maintenance records', '', 'Manufacturing - Facts', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant (NEW)' },
+        { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by production line (NEW)' },
         { in: 'query', name: 'asset_id', schema: { type: 'string', format: 'uuid' } },
         { in: 'query', name: 'maintenance_type', schema: { type: 'string' } },
         ...dateRangeParams,
@@ -697,6 +706,33 @@ const spec = {
           500: { $ref: '#/components/responses/ServerError' },
         },
       },
+    },
+    '/api/mfg/production-summary': {
+      get: commonListPath('Production summary (aggregated)', 'Server-side aggregated production metrics grouped by line', 'Manufacturing - KPIs', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+        { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+        ...dateRangeParams,
+      ]),
+    },
+    '/api/mfg/cost-summary': {
+      get: commonListPath('Cost summary (aggregated)', 'Server-side aggregated cost analysis grouped by line', 'Manufacturing - KPIs', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+        { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+        ...dateRangeParams,
+      ]),
+    },
+    '/api/mfg/inventory-summary': {
+      get: commonListPath('Inventory summary (aggregated)', 'Server-side aggregated inventory transactions grouped by material', 'Manufacturing - KPIs', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+        ...dateRangeParams,
+      ]),
+    },
+    '/api/mfg/maintenance-summary': {
+      get: commonListPath('Maintenance summary (aggregated)', 'Server-side aggregated maintenance records grouped by machine', 'Manufacturing - KPIs', [
+        { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+        { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+        ...dateRangeParams,
+      ]),
     },
     '/api/mfg/reports/generate': {
       get: {
