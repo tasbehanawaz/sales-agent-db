@@ -24,10 +24,14 @@ function sumMonths(byMonth, months) {
   return months.reduce((total, month) => total + (Number(byMonth[month]) || 0), 0);
 }
 
-async function getForecast(query) {
+async function getForecast(query, startDate, endDate) {
   const asOfRows = await query(`SELECT CAST(MAX(sale_date) AS DATE) AS d FROM dbo.secondary_sales`);
   const asOf = asOfRows[0].d;
   const lastMonth = monthKey(asOf);
+
+  // Use provided dates or fall back to 2-year window
+  const effectiveEndDate = endDate || asOf;
+  const effectiveStartDate = startDate || new Date(new Date(effectiveEndDate).setFullYear(new Date(effectiveEndDate).getFullYear() - 2));
 
   const monthly = await query(`
     WITH as_of AS (
@@ -39,10 +43,10 @@ async function getForecast(query) {
       SUM(ss.value_sold) AS value_sold
     FROM dbo.secondary_sales ss
     CROSS JOIN as_of a
-    WHERE ss.sale_date > DATEADD(YEAR, -2, a.d) AND ss.sale_date <= a.d
+    WHERE ss.sale_date >= @start_date AND ss.sale_date <= @end_date
     GROUP BY ss.region, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
     ORDER BY ss.region, month
-  `);
+  `, { start_date: effectiveStartDate, end_date: effectiveEndDate });
 
   const byRegion = {};
   for (const row of monthly) {

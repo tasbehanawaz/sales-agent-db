@@ -215,12 +215,27 @@ app.get('/api/rep-performance', async (req, res) => {
 
 app.get('/api/product-trends', async (req, res) => {
   try {
-    const months = intParam(req.query.months, 12, 1, 24);
     const limit = intParam(req.query.limit, 200, 1, 1000);
-    const params = { months, limit };
+    const startDate = dateParam(req.query.start_date);
+    const endDate = dateParam(req.query.end_date);
+    const months = intParam(req.query.months, 12, 1, 24);
+
+    const params = { limit };
     const clauses = [];
     addFilter(clauses, params, 'region', 'm.region = @region', strParam(req.query.region));
     addFilter(clauses, params, 'sku', 'p.sku = @sku', strParam(req.query.sku));
+
+    let dateFilter = '';
+    if (startDate || endDate) {
+      const effectiveStart = startDate || '1900-01-01';
+      const effectiveEnd = endDate || '2099-12-31';
+      dateFilter = `AND ss.sale_date >= @start_date AND ss.sale_date <= @end_date`;
+      params.start_date = effectiveStart;
+      params.end_date = effectiveEnd;
+    } else {
+      params.months = months;
+      dateFilter = `AND ss.sale_date > DATEADD(MONTH, -@months, a.d)`;
+    }
 
     const data = await query(`
       WITH as_of AS (
@@ -237,7 +252,7 @@ app.get('/api/product-trends', async (req, res) => {
           COUNT(DISTINCT ss.rep_id) AS rep_count
         FROM dbo.secondary_sales ss
         CROSS JOIN as_of a
-        WHERE ss.sale_date > DATEADD(MONTH, -@months, a.d)
+        WHERE 1=1 ${dateFilter}
         GROUP BY ss.product_id, ss.region, DATEFROMPARTS(YEAR(ss.sale_date), MONTH(ss.sale_date), 1)
       )
       SELECT TOP (@limit)
@@ -491,7 +506,9 @@ app.get('/api/territory-coverage', async (req, res) => {
 
 app.get('/api/insights/forecast', async (req, res) => {
   try {
-    const data = await getForecast(query);
+    const startDate = dateParam(req.query.start_date);
+    const endDate = dateParam(req.query.end_date);
+    const data = await getForecast(query, startDate, endDate);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -571,6 +588,12 @@ app.get('/api/mfg/costs', mfgRoutes.getCostRecords);
 app.get('/api/mfg/oee-dashboard', mfgRoutes.getOEEDashboard);
 app.get('/api/mfg/downtime-analysis', mfgRoutes.getDowntimeAnalysis);
 app.get('/api/mfg/quality-trends', mfgRoutes.getQualityTrends);
+
+// Summary endpoints
+app.get('/api/mfg/production-summary', mfgRoutes.getProductionSummary);
+app.get('/api/mfg/cost-summary', mfgRoutes.getCostSummary);
+app.get('/api/mfg/inventory-summary', mfgRoutes.getInventorySummary);
+app.get('/api/mfg/maintenance-summary', mfgRoutes.getMaintenanceSummary);
 
 // Report generation
 app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);

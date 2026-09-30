@@ -208,9 +208,9 @@ async function getDowntimeEvents(req, res) {
 async function getQualityTests(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const ids = uuidParams(req.query, ['line_id', 'product_id']);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id', 'product_id']);
     if (ids.error) return res.status(400).json({ success: false, error: ids.error });
-    const { line_id: lineId, product_id: productId } = ids.values;
+    const { plant_id: plantId, line_id: lineId, product_id: productId } = ids.values;
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
@@ -223,6 +223,7 @@ async function getQualityTests(req, res) {
     const params = { limit };
     const clauses = [];
 
+    if (plantId) addFilter(clauses, params, 'plant_id', 'qt.plant_id = @plant_id', plantId);
     if (lineId) addFilter(clauses, params, 'line_id', 'qt.line_id = @line_id', lineId);
     if (productId) addFilter(clauses, params, 'product_id', 'qt.product_id = @product_id', productId);
     if (fromDate) addFilter(clauses, params, 'from_date', 'qt.date >= @from_date', fromDate);
@@ -243,20 +244,24 @@ async function getQualityTests(req, res) {
 async function getMaintenanceRecords(req, res) {
   try {
     const limit = intParam(req.query.limit, 100, 1, 1000);
-    const ids = uuidParams(req.query, ['asset_id']);
+    const ids = uuidParams(req.query, ['plant_id', 'line_id', 'asset_id']);
     if (ids.error) return res.status(400).json({ success: false, error: ids.error });
-    const assetId = ids.values.asset_id;
+    const { plant_id: plantId, line_id: lineId, asset_id: assetId } = ids.values;
     const maintType = strParam(req.query.maintenance_type);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
 
-    let sql = `SELECT TOP (@limit) mr.*, m.machine_name, m.criticality
+    let sql = `SELECT TOP (@limit) mr.*, m.machine_name, m.criticality, l.line_name, p.plant_name
                FROM [${MFG_DB}].dbo.maintenance_records mr
-               JOIN [${MFG_DB}].dbo.machines m ON mr.asset_id = m.asset_id`;
+               JOIN [${MFG_DB}].dbo.machines m ON mr.asset_id = m.asset_id
+               JOIN [${MFG_DB}].dbo.production_lines l ON m.line_id = l.line_id
+               JOIN [${MFG_DB}].dbo.plants p ON m.plant_id = p.plant_id`;
 
     const params = { limit };
     const clauses = [];
 
+    if (plantId) addFilter(clauses, params, 'plant_id', 'm.plant_id = @plant_id', plantId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'm.line_id = @line_id', lineId);
     if (assetId) addFilter(clauses, params, 'asset_id', 'mr.asset_id = @asset_id', assetId);
     if (maintType) addFilter(clauses, params, 'maintenance_type', 'mr.maintenance_type = @maintenance_type', maintType);
     if (fromDate) addFilter(clauses, params, 'from_date', 'CAST(mr.repair_start_datetime AS DATE) >= @from_date', fromDate);
@@ -1164,6 +1169,257 @@ async function getExecutiveReportData(fromDate, toDate, plantId) {
   };
 }
 
+// ============= SUMMARY ENDPOINTS =============
+
+async function getProductionSummary(req, res) {
+  try {
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId } = ids.values;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+
+    let sql = `
+      SELECT
+        COUNT(*) as total_runs,
+        SUM(planned_quantity) as total_planned,
+        SUM(actual_quantity) as total_actual,
+        SUM(good_quantity) as total_good,
+        SUM(rejected_quantity) as total_rejected,
+        CAST(AVG(CAST(actual_quantity AS FLOAT) / NULLIF(planned_quantity, 0) * 100) AS DECIMAL(10,2)) as avg_output_pct,
+        CAST(AVG(CAST(good_quantity AS FLOAT) / NULLIF(actual_quantity, 0) * 100) AS DECIMAL(10,2)) as avg_quality_pct
+      FROM [${MFG_DB}].dbo.production_runs WHERE 1=1`;
+
+    const params = {};
+    const clauses = [];
+
+    if (plantId) addFilter(clauses, params, 'plant_id', 'plant_id = @plant_id', plantId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'line_id = @line_id', lineId);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'date >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'date <= @to_date', toDate);
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+
+    const summary = await query(sql, params);
+
+    let byLineSql = `SELECT TOP 20
+      pl.plant_name,
+      l.line_name,
+      COUNT(*) as run_count,
+      SUM(pr.good_quantity) as good_qty,
+      SUM(pr.actual_quantity) as actual_qty,
+      CAST(AVG(CAST(pr.good_quantity AS FLOAT) / NULLIF(pr.actual_quantity, 0) * 100) AS DECIMAL(10,2)) as quality_pct
+    FROM [${MFG_DB}].dbo.production_runs pr
+    JOIN [${MFG_DB}].dbo.production_lines l ON pr.line_id = l.line_id
+    JOIN [${MFG_DB}].dbo.plants pl ON pr.plant_id = pl.plant_id
+    WHERE 1=1`;
+
+    if (plantId) byLineSql += ` AND pr.plant_id = @plant_id`;
+    if (lineId) byLineSql += ` AND pr.line_id = @line_id`;
+    if (fromDate) byLineSql += ` AND pr.date >= @from_date`;
+    if (toDate) byLineSql += ` AND pr.date <= @to_date`;
+    byLineSql += ` GROUP BY pl.plant_name, l.line_name ORDER BY good_qty DESC`;
+
+    const byLine = await query(byLineSql, params);
+
+    res.json({
+      success: true,
+      summary: summary[0] || {},
+      by_line: byLine || [],
+      message: 'Production summary aggregated by line'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function getCostSummary(req, res) {
+  try {
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId } = ids.values;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+
+    let sql = `
+      SELECT
+        COUNT(*) as record_count,
+        SUM(units_produced) as total_units,
+        CAST(AVG(actual_cost_per_unit) AS DECIMAL(10,2)) as avg_unit_cost,
+        CAST(SUM(actual_cost_per_unit * units_produced) AS DECIMAL(12,2)) as total_production_cost,
+        CAST(SUM(energy_cost) AS DECIMAL(12,2)) as total_energy_cost,
+        CAST(SUM(scrap_cost) AS DECIMAL(12,2)) as total_scrap_cost,
+        CAST(SUM(labor_cost) AS DECIMAL(12,2)) as total_labor_cost,
+        CAST(AVG(energy_kwh / NULLIF(units_produced, 0)) AS DECIMAL(10,2)) as avg_energy_per_unit
+      FROM [${MFG_DB}].dbo.cost_records WHERE 1=1`;
+
+    const params = {};
+    const clauses = [];
+
+    if (plantId) addFilter(clauses, params, 'plant_id', 'plant_id = @plant_id', plantId);
+    if (lineId) addFilter(clauses, params, 'line_id', 'line_id = @line_id', lineId);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'date >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'date <= @to_date', toDate);
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+
+    const summary = await query(sql, params);
+
+    let byLineSql = `SELECT TOP 20
+      pl.plant_name,
+      l.line_name,
+      SUM(cr.units_produced) as units,
+      CAST(AVG(cr.actual_cost_per_unit) AS DECIMAL(10,2)) as avg_unit_cost,
+      CAST(SUM(cr.energy_cost) AS DECIMAL(12,2)) as energy_cost,
+      CAST(SUM(cr.scrap_cost) AS DECIMAL(12,2)) as scrap_cost
+    FROM [${MFG_DB}].dbo.cost_records cr
+    JOIN [${MFG_DB}].dbo.production_lines l ON cr.line_id = l.line_id
+    JOIN [${MFG_DB}].dbo.plants pl ON cr.plant_id = pl.plant_id
+    WHERE 1=1`;
+
+    if (plantId) byLineSql += ` AND cr.plant_id = @plant_id`;
+    if (lineId) byLineSql += ` AND cr.line_id = @line_id`;
+    if (fromDate) byLineSql += ` AND cr.date >= @from_date`;
+    if (toDate) byLineSql += ` AND cr.date <= @to_date`;
+    byLineSql += ` GROUP BY pl.plant_name, l.line_name ORDER BY scrap_cost DESC`;
+
+    const byLine = await query(byLineSql, params);
+
+    res.json({
+      success: true,
+      summary: summary[0] || {},
+      by_line: byLine || [],
+      message: 'Cost summary aggregated by line'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function getInventorySummary(req, res) {
+  try {
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+
+    let sql = `
+      SELECT
+        COUNT(*) as transaction_count,
+        COUNT(DISTINCT material_id) as unique_materials,
+        COUNT(DISTINCT supplier_id) as unique_suppliers
+      FROM [${MFG_DB}].dbo.inventory_transactions WHERE 1=1`;
+
+    const params = {};
+    const clauses = [];
+
+    if (plantId) addFilter(clauses, params, 'plant_id', 'plant_id = @plant_id', plantId);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'date >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'date <= @to_date', toDate);
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+
+    const summary = await query(sql, params);
+
+    let byMaterialSql = `SELECT TOP 25
+      m.material_name,
+      COUNT(*) as transaction_count
+    FROM [${MFG_DB}].dbo.inventory_transactions it
+    JOIN [${MFG_DB}].dbo.materials m ON it.material_id = m.material_id
+    WHERE 1=1`;
+
+    if (plantId) byMaterialSql += ` AND it.plant_id = @plant_id`;
+    if (fromDate) byMaterialSql += ` AND it.date >= @from_date`;
+    if (toDate) byMaterialSql += ` AND it.date <= @to_date`;
+    byMaterialSql += ` GROUP BY m.material_name ORDER BY transaction_count DESC`;
+
+    const byMaterial = await query(byMaterialSql, params);
+
+    res.json({
+      success: true,
+      summary: summary[0] || {},
+      by_material: byMaterial || [],
+      message: 'Inventory summary aggregated by material'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function getMaintenanceSummary(req, res) {
+  try {
+    const ids = uuidParams(req.query, ['plant_id', 'line_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const { plant_id: plantId, line_id: lineId } = ids.values;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+
+    let sql = `
+      SELECT
+        COUNT(*) as total_records,
+        SUM(CASE WHEN maintenance_type = 'preventive' THEN 1 ELSE 0 END) as preventive_count,
+        SUM(CASE WHEN maintenance_type = 'corrective' THEN 1 ELSE 0 END) as corrective_count,
+        COUNT(DISTINCT asset_id) as unique_machines
+      FROM [${MFG_DB}].dbo.maintenance_records WHERE 1=1`;
+
+    const params = {};
+    const clauses = [];
+
+    if (plantId) addFilter(clauses, params, 'plant_id', 'plant_id = @plant_id', plantId);
+    if (lineId) {
+      sql = sql.replace('FROM [${MFG_DB}].dbo.maintenance_records',
+        `FROM [${MFG_DB}].dbo.maintenance_records mr
+         JOIN [${MFG_DB}].dbo.machines m ON mr.asset_id = m.asset_id`);
+      addFilter(clauses, params, 'line_id', 'm.line_id = @line_id', lineId);
+    }
+    if (fromDate) addFilter(clauses, params, 'from_date', 'CAST(repair_start_datetime AS DATE) >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'CAST(repair_start_datetime AS DATE) <= @to_date', toDate);
+
+    if (clauses.length > 0) {
+      sql += ` AND ${clauses.join(' AND ')}`;
+    }
+
+    const summary = await query(sql, params);
+
+    let byMachineSQL = `SELECT TOP 25
+      p.plant_name,
+      l.line_name,
+      m.machine_name,
+      COUNT(*) as maintenance_count,
+      SUM(CASE WHEN mr.maintenance_type = 'preventive' THEN 1 ELSE 0 END) as preventive,
+      SUM(CASE WHEN mr.maintenance_type = 'corrective' THEN 1 ELSE 0 END) as corrective
+    FROM [${MFG_DB}].dbo.maintenance_records mr
+    JOIN [${MFG_DB}].dbo.machines m ON mr.asset_id = m.asset_id
+    JOIN [${MFG_DB}].dbo.production_lines l ON m.line_id = l.line_id
+    JOIN [${MFG_DB}].dbo.plants p ON m.plant_id = p.plant_id
+    WHERE 1=1`;
+
+    if (plantId) byMachineSQL += ` AND m.plant_id = @plant_id`;
+    if (lineId) byMachineSQL += ` AND m.line_id = @line_id`;
+    if (fromDate) byMachineSQL += ` AND CAST(mr.repair_start_datetime AS DATE) >= @from_date`;
+    if (toDate) byMachineSQL += ` AND CAST(mr.repair_start_datetime AS DATE) <= @to_date`;
+    byMachineSQL += ` GROUP BY p.plant_name, l.line_name, m.machine_name ORDER BY maintenance_count DESC`;
+
+    const byMachine = await query(byMachineSQL, params);
+
+    res.json({
+      success: true,
+      summary: summary[0] || {},
+      by_machine: byMachine || [],
+      message: 'Maintenance summary aggregated by machine'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 // Export all handlers
 module.exports = {
   // Dimensions
@@ -1184,6 +1440,12 @@ module.exports = {
   getOEEDashboard,
   getDowntimeAnalysis,
   getQualityTrends,
+
+  // Summaries
+  getProductionSummary,
+  getCostSummary,
+  getInventorySummary,
+  getMaintenanceSummary,
 
   // Reports
   generateReport,
