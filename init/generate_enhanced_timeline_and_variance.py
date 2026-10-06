@@ -183,6 +183,8 @@ def generate_production_runs_enhanced(conn, dimensions, plant_profiles):
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
 
+    cursor.close()
+
     # Assign products to plants (some variation)
     plant_product_prefs = {}
     for plant_id in dimensions['plants']:
@@ -295,13 +297,13 @@ def generate_quality_tests_enhanced(conn, dimensions, plant_profiles):
     defect_types = ['Surface Defect', 'Dimension', 'Color', 'Contamination', 'Seal Failure', 'Packaging', 'Weight']
     scrap_reasons = ['Out of Spec', 'Contaminated', 'Damaged', 'Wrong Color', 'Dimensions Off']
 
-    batch_num = 1000
-
     # Get plant-to-lines mapping
     plant_lines = {}
     for plant_id in dimensions['plants']:
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
+
+    cursor.close()
 
     while current <= end_date:
         if current.weekday() < 5:
@@ -320,7 +322,7 @@ def generate_quality_tests_enhanced(conn, dimensions, plant_profiles):
                         inspection_result = 'Pass' if rejected_qty == 0 else ('Rework' if rework_qty > 0 else 'Fail')
 
                         records.append({
-                            'batch_id': f'BATCH-{batch_num:06d}',
+                            'batch_id': f'BATCH-{str(uuid.uuid4())[:8].upper()}',
                             'date': current.date(),
                             'plant_id': plant_id,
                             'line_id': line_id,
@@ -333,7 +335,6 @@ def generate_quality_tests_enhanced(conn, dimensions, plant_profiles):
                             'defect_severity': np.random.choice(['Critical', 'Major', 'Minor']) if rejected_qty > 0 else None,
                             'scrap_reason': np.random.choice(scrap_reasons) if rejected_qty - rework_qty > 0 else None
                         })
-                        batch_num += 1
 
         current += timedelta(days=1)
 
@@ -361,7 +362,6 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
     end_date = datetime(2026, 9, 30)
     current = start_date
 
-    wo_num = 5000
     maintenance_types = ['Preventive', 'Corrective', 'Emergency']
     spare_parts = [
         'Belt Assembly', 'Motor', 'Bearing', 'Seal Kit', 'Filter',
@@ -379,6 +379,8 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
             WHERE pl.plant_id = ?
         """, (plant_id,))
         plant_machines[plant_id] = [row[0] for row in cursor.fetchall()]
+
+    cursor.close()
 
     while current <= end_date:
         # Newer plants need more maintenance
@@ -408,7 +410,7 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
 
                 records.append({
                     'asset_id': asset_id,
-                    'work_order_id': f'WO-{wo_num:06d}',
+                    'work_order_id': f'WO-{str(uuid.uuid4())[:8].upper()}',
                     'maintenance_type': maint_type,
                     'failure_date': current.date() if maint_type != 'Preventive' else None,
                     'repair_start_datetime': start_time,
@@ -419,7 +421,6 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
                     'planned_maintenance_due_date': planned_start,
                     'planned_maintenance_completed_date': planned_complete
                 })
-                wo_num += 1
 
         current += timedelta(days=1)
 
@@ -469,6 +470,8 @@ def generate_downtime_enhanced(conn, dimensions, plant_profiles):
     for plant_id in dimensions['plants']:
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
+
+    cursor.close()
 
     while current <= end_date:
         for plant_id in dimensions['plants']:
