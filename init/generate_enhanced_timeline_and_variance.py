@@ -183,8 +183,6 @@ def generate_production_runs_enhanced(conn, dimensions, plant_profiles):
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
 
-    cursor.close()
-
     # Assign products to plants (some variation)
     plant_product_prefs = {}
     for plant_id in dimensions['plants']:
@@ -269,7 +267,6 @@ def generate_production_runs_enhanced(conn, dimensions, plant_profiles):
 
     # Bulk insert
     print(f"  Inserting {len(records)} production run records...")
-    cursor = conn.cursor()
 
     for row in records:
         values = tuple(convert_numpy_types(v) for v in row.values())
@@ -303,7 +300,6 @@ def generate_quality_tests_enhanced(conn, dimensions, plant_profiles):
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
 
-    cursor.close()
 
     while current <= end_date:
         if current.weekday() < 5:
@@ -339,7 +335,6 @@ def generate_quality_tests_enhanced(conn, dimensions, plant_profiles):
         current += timedelta(days=1)
 
     print(f"  Inserting {len(records)} quality test records...")
-    cursor = conn.cursor()
 
     for row in records:
         values = tuple(convert_numpy_types(v) for v in row.values())
@@ -380,7 +375,6 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
         """, (plant_id,))
         plant_machines[plant_id] = [row[0] for row in cursor.fetchall()]
 
-    cursor.close()
 
     while current <= end_date:
         # Newer plants need more maintenance
@@ -425,7 +419,6 @@ def generate_maintenance_enhanced(conn, dimensions, plant_profiles):
         current += timedelta(days=1)
 
     print(f"  Inserting {len(records)} maintenance records...")
-    cursor = conn.cursor()
 
     for row in records:
         values = tuple(convert_numpy_types(v) for v in row.values())
@@ -471,7 +464,6 @@ def generate_downtime_enhanced(conn, dimensions, plant_profiles):
         cursor.execute("SELECT line_id FROM dbo.production_lines WHERE plant_id = ?", (plant_id,))
         plant_lines[plant_id] = [row[0] for row in cursor.fetchall()]
 
-    cursor.close()
 
     while current <= end_date:
         for plant_id in dimensions['plants']:
@@ -507,7 +499,6 @@ def generate_downtime_enhanced(conn, dimensions, plant_profiles):
         current += timedelta(days=1)
 
     print(f"  Inserting {len(records)} downtime event records...")
-    cursor = conn.cursor()
 
     for row in records:
         downtime_id = str(uuid.uuid4())
