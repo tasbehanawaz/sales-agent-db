@@ -242,7 +242,7 @@ def generate_production_runs_enhanced(conn, dimensions, plant_profiles):
                             operator_id = None
                             if dimensions['operators']:
                                 # Prefer operators from same plant if possible
-                                cursor.execute("SELECT operator_id FROM dbo.operators WHERE plant_id = ? LIMIT 1", (plant_id,))
+                                cursor.execute("SELECT TOP 1 operator_id FROM dbo.operators WHERE plant_id = ?", (plant_id,))
                                 op_result = cursor.fetchone()
                                 operator_id = op_result[0] if op_result else np.random.choice(dimensions['operators'])
 
