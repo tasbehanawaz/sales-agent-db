@@ -660,6 +660,60 @@ const spec = {
         },
       },
     },
+    '/api/mfg/downtime-summary': {
+      get: {
+        tags: ['Manufacturing - KPIs'],
+        summary: 'Downtime totals for the full date range',
+        description: 'Sums every downtime event in the range. No row sample. Use group_by to match the chart: plant, failure_mode, line, or a monthly series.',
+        parameters: [
+          {
+            in: 'query',
+            name: 'group_by',
+            schema: {
+              type: 'string',
+              enum: ['plant', 'failure_mode', 'line', 'plant_month', 'failure_mode_month'],
+              default: 'plant',
+            },
+            description: 'How to group the totals. plant_month and failure_mode_month add a month field (YYYY-MM).',
+          },
+          { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Limit totals to one plant' },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: {
+            description: 'Aggregated downtime totals',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    count: { type: 'integer', example: 11 },
+                    group_by: { type: 'string', example: 'plant' },
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          label: { type: 'string', example: 'Dubai Manufacturing', description: 'Plant, failure mode, or line name' },
+                          plant_name: { type: 'string', description: 'Present when group_by is line' },
+                          month: { type: 'string', example: '2025-07', description: 'Present for plant_month and failure_mode_month' },
+                          event_count: { type: 'integer', example: 173 },
+                          duration_minutes: { type: 'integer', example: 30284 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
     '/api/mfg/downtime-analysis': {
       get: {
         tags: ['Manufacturing - KPIs'],

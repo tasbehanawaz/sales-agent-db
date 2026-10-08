@@ -446,6 +446,68 @@ async function getDowntimeAnalysis(req, res) {
   }
 }
 
+async function getDowntimeSummary(req, res) {
+  try {
+    const groupBy = String(strParam(req.query.group_by) || 'plant').toLowerCase();
+    const allowed = ['plant', 'failure_mode', 'line', 'plant_month', 'failure_mode_month'];
+    if (!allowed.includes(groupBy)) {
+      return res.status(400).json({
+        success: false,
+        error: 'group_by must be plant, failure_mode, line, plant_month, or failure_mode_month'
+      });
+    }
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+    const params = {};
+    const clauses = [];
+    if (plantId) addFilter(clauses, params, 'plant_id', 'de.plant_id = @plant_id', plantId);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'CAST(de.event_start_datetime AS DATE) >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'CAST(de.event_start_datetime AS DATE) <= @to_date', toDate);
+
+    let labelExpr;
+    let extraSelect = '';
+    let groupExpr;
+    if (groupBy === 'plant') {
+      labelExpr = 'p.plant_name';
+      groupExpr = 'p.plant_name';
+    } else if (groupBy === 'line') {
+      labelExpr = 'l.line_name';
+      extraSelect = ', p.plant_name';
+      groupExpr = 'l.line_name, p.plant_name';
+    } else if (groupBy === 'plant_month') {
+      labelExpr = 'p.plant_name';
+      extraSelect = ', CONVERT(char(7), de.event_start_datetime, 126) AS month';
+      groupExpr = 'p.plant_name, CONVERT(char(7), de.event_start_datetime, 126)';
+    } else if (groupBy === 'failure_mode_month') {
+      labelExpr = "ISNULL(de.failure_mode, ISNULL(de.category, 'Unknown'))";
+      extraSelect = ', CONVERT(char(7), de.event_start_datetime, 126) AS month';
+      groupExpr = `${labelExpr}, CONVERT(char(7), de.event_start_datetime, 126)`;
+    } else {
+      labelExpr = "ISNULL(de.failure_mode, ISNULL(de.category, 'Unknown'))";
+      groupExpr = labelExpr;
+    }
+
+    const sql = `
+      SELECT ${labelExpr} AS label${extraSelect},
+        COUNT(*) AS event_count,
+        SUM(de.duration_minutes) AS duration_minutes
+      FROM [${MFG_DB}].dbo.downtime_events de
+      JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = de.plant_id
+      JOIN [${MFG_DB}].dbo.production_lines l ON l.line_id = de.line_id
+      ${whereSql(clauses)}
+      GROUP BY ${groupExpr}
+      ORDER BY SUM(de.duration_minutes) DESC`;
+
+    const data = await query(sql, params);
+    res.json({ success: true, count: data.length, group_by: groupBy, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 async function getQualityTrends(req, res) {
   try {
     const limit = intParam(req.query.limit, 200, 1, 1000);
@@ -1439,6 +1501,7 @@ module.exports = {
   // KPIs
   getOEEDashboard,
   getDowntimeAnalysis,
+  getDowntimeSummary,
   getQualityTrends,
 
   // Summaries
