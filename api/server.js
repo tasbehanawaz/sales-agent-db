@@ -11,6 +11,8 @@ const { optimizeResponse } = require('./optimize');
 const { cacheMiddleware } = require('./cache');
 const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
 const mfgRoutes = require('./mfg-routes');
+const apexRoutes = require('./apex-routes');
+const apexTableRoutes = require('./apex-table-routes');
 const SalesReportGenerator = require('./reports/salesReportGenerator');
 const swaggerUi = require('swagger-ui-express');
 const { swaggerSpec } = require('./swagger');
@@ -596,6 +598,25 @@ app.get('/api/mfg/production-summary', mfgRoutes.getProductionSummary);
 app.get('/api/mfg/cost-summary', mfgRoutes.getCostSummary);
 app.get('/api/mfg/inventory-summary', mfgRoutes.getInventorySummary);
 app.get('/api/mfg/maintenance-summary', mfgRoutes.getMaintenanceSummary);
+
+// ============= APEX GROUP ENDPOINTS =============
+
+app.get('/api/apex/executive-scorecard', apexRoutes.getExecutiveScorecard);
+app.get('/api/apex/performance-drivers', apexRoutes.getPerformanceDrivers);
+app.get('/api/apex/customer-risk', apexRoutes.getCustomerRisk);
+app.get('/api/apex/financial-forecast', apexRoutes.getFinancialForecast);
+app.get('/api/apex/workforce-risk', apexRoutes.getWorkforceRisk);
+app.get('/api/apex/control-risk', apexRoutes.getControlRisk);
+app.get('/api/apex/recommendations', apexRoutes.getRecommendations);
+app.get('/api/apex/scenario-simulation', apexRoutes.getScenarioSimulation);
+app.get('/api/apex/finance/gl', apexRoutes.getGeneralLedger);
+app.get('/api/apex/finance/receivables', apexRoutes.getReceivables);
+app.get('/api/apex/hr/workforce', apexRoutes.getWorkforce);
+app.get('/api/apex/audit/exceptions', apexRoutes.getAuditExceptions);
+app.get('/api/apex/tables', apexTableRoutes.listTables);
+for (const tableKey of Object.keys(apexTableRoutes.TABLES)) {
+  app.get('/api/apex/tables/' + tableKey, apexTableRoutes.handler(tableKey));
+}
 
 // Report generation
 app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);

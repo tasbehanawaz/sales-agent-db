@@ -52,7 +52,7 @@ const spec = {
     title: 'Sales & Manufacturing Agent API',
     version: '1.0.0',
     description:
-      'REST API for the Sales Agent and Manufacturing Agent databases. All `/api/*` endpoints require an `x-api-key` header.',
+      'REST API for the Sales Agent, Manufacturing Agent, and Apex Group databases. All `/api/*` endpoints require an `x-api-key` header.',
     contact: { name: 'Sales Agent API' },
     license: { name: 'MIT' },
   },
@@ -67,6 +67,7 @@ const spec = {
     { name: 'Manufacturing - Facts', description: 'Production, downtime, quality, maintenance, inventory, cost' },
     { name: 'Manufacturing - KPIs', description: 'OEE, downtime analysis, quality trends' },
     { name: 'Manufacturing - Reports', description: 'PPTX/PDF report generation and downloads' },
+    { name: 'Apex Group', description: 'Apex Group scorecards, predictions, and one list endpoint per database table' },
   ],
   components: {
     securitySchemes: {
@@ -959,8 +960,262 @@ const spec = {
         },
       },
     },
+    '/api/apex/executive-scorecard': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Monthly executive scorecard',
+        description: 'Revenue, EBITDA, cash, DSO, workforce, and control KPIs from serving_executive_scorecard_monthly. Optional filters: region, business_unit, scope_id, from, to, limit.',
+        parameters: [
+          { in: 'query', name: 'region', schema: { type: 'string' } },
+          { in: 'query', name: 'business_unit', schema: { type: 'string' } },
+          { in: 'query', name: 'scope_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 1000, maximum: 2000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'Scorecard rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/performance-drivers': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Margin bridge and monthly performance drivers',
+        description: 'Returns the full margin bridge plus latent drivers. Optional filters on drivers: org_unit_id, from, to, limit.',
+        parameters: [
+          { in: 'query', name: 'org_unit_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 500, maximum: 2000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'Bridge and drivers', content: { 'application/json': { schema: successEnvelope({ type: 'object', additionalProperties: true }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/customer-risk': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Customer churn, renewal, and cash exposure',
+        description: 'Highest revenue-at-risk customers first. Optional filters: risk_band, customer_id, from, to, limit. from and to apply to forecast_month.',
+        parameters: [
+          { in: 'query', name: 'risk_band', schema: { type: 'string' } },
+          { in: 'query', name: 'customer_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'Customer risk rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/financial-forecast': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Revenue, EBITDA, cash, and DSO forecast',
+        description: 'Optional filters: scenario_id, region, business_unit, org_unit_id, from, to, limit. from and to apply to forecast_month.',
+        parameters: [
+          { in: 'query', name: 'scenario_id', schema: { type: 'string' } },
+          { in: 'query', name: 'region', schema: { type: 'string' } },
+          { in: 'query', name: 'business_unit', schema: { type: 'string' } },
+          { in: 'query', name: 'org_unit_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 200, maximum: 1000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'Forecast rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/workforce-risk': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Attrition and capacity risk by cohort',
+        description: 'Highest attrition probability first. Optional filters: region, business_unit, risk_band, role_cohort, limit.',
+        parameters: [
+          { in: 'query', name: 'region', schema: { type: 'string' } },
+          { in: 'query', name: 'business_unit', schema: { type: 'string' } },
+          { in: 'query', name: 'risk_band', schema: { type: 'string' } },
+          { in: 'query', name: 'role_cohort', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 200, maximum: 1000 } },
+        ],
+        responses: {
+          200: { description: 'Workforce risk rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/control-risk': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Control-exception risk by process and entity',
+        description: 'Ordered by expected monetary exposure. Optional filters: region, process, risk_band, limit.',
+        parameters: [
+          { in: 'query', name: 'region', schema: { type: 'string' } },
+          { in: 'query', name: 'process', schema: { type: 'string' } },
+          { in: 'query', name: 'risk_band', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 320, maximum: 1000 } },
+        ],
+        responses: {
+          200: { description: 'Control risk rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/recommendations': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Ranked intervention recommendations',
+        description: 'Recommendations joined to the action catalog, highest priority first. Optional filters: action_id, scope_id, limit.',
+        parameters: [
+          { in: 'query', name: 'action_id', schema: { type: 'string' } },
+          { in: 'query', name: 'scope_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },
+        ],
+        responses: {
+          200: { description: 'Recommendations', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/scenario-simulation': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Scenario outcomes and decision constraints',
+        description: 'Returns every scenario result and every decision constraint.',
+        responses: {
+          200: { description: 'Scenarios and constraints', content: { 'application/json': { schema: successEnvelope({ type: 'object', additionalProperties: true }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/finance/gl': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'General ledger totals plus recent lines',
+        description: 'Summary covers every matching journal line. The row list is capped. Optional filters: org_unit_id, account_id, manual (0 or 1), from, to, limit.',
+        parameters: [
+          { in: 'query', name: 'org_unit_id', schema: { type: 'string' } },
+          { in: 'query', name: 'account_id', schema: { type: 'string' } },
+          { in: 'query', name: 'manual', schema: { type: 'integer', enum: [0, 1] } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'GL summary and lines', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/finance/receivables': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Receivables totals plus the most overdue invoices',
+        description: 'Summary covers every matching invoice. Optional filters: customer_id, collection_status, dispute (0 or 1), from, to, limit.',
+        parameters: [
+          { in: 'query', name: 'customer_id', schema: { type: 'string' } },
+          { in: 'query', name: 'collection_status', schema: { type: 'string' } },
+          { in: 'query', name: 'dispute', schema: { type: 'integer', enum: [0, 1] } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: { description: 'Receivables summary and invoices', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/hr/workforce': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Workforce snapshot, movement, vacancies, and attendance',
+        description: 'Counts cover the full tables. Lists are capped to the latest employee month plus recent movement and vacancies. Optional filters: org_unit_id, limit.',
+        parameters: [
+          { in: 'query', name: 'org_unit_id', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 50, maximum: 500 } },
+        ],
+        responses: {
+          200: { description: 'Workforce summary and lists', content: { 'application/json': { schema: successEnvelope({ type: 'object', additionalProperties: true }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
+    '/api/apex/audit/exceptions': {
+      get: {
+        tags: ['Apex Group'],
+        summary: 'Control tests, exceptions, findings, and remediation',
+        description: 'Counts and exposure cover every matching row. Lists are capped. Optional filters: org_unit_id, severity, status, limit. Tests ignore severity and status.',
+        parameters: [
+          { in: 'query', name: 'org_unit_id', schema: { type: 'string' } },
+          { in: 'query', name: 'severity', schema: { type: 'string' } },
+          { in: 'query', name: 'status', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 50, maximum: 500 } },
+        ],
+        responses: {
+          200: { description: 'Audit summary and lists', content: { 'application/json': { schema: successEnvelope({ type: 'object', additionalProperties: true }) } } },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
   },
 };
+
+const { TABLES: apexTableCatalog } = require('./apex-table-catalog');
+
+spec.paths['/api/apex/tables'] = {
+  get: {
+    tags: ['Apex Group'],
+    summary: 'List every Apex table endpoint',
+    description: 'Returns the path, row count, date column, and filter names for each table.',
+    responses: {
+      200: { description: 'Table index', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+      401: { $ref: '#/components/responses/Unauthorized' },
+      500: { $ref: '#/components/responses/ServerError' },
+    },
+  },
+};
+
+for (const [key, table] of Object.entries(apexTableCatalog)) {
+  const parameters = [
+    { in: 'query', name: 'limit', schema: { type: 'integer', default: table.defaultLimit, maximum: table.maxLimit } },
+  ];
+  if (table.dateColumn) parameters.push(...dateRangeParams);
+  for (const filter of table.filters) {
+    const schema = { type: filter.kind === 'int' || filter.kind === 'flag' ? 'integer' : 'string' };
+    if (filter.kind === 'flag') schema.enum = [0, 1];
+    if (filter.kind === 'date' || filter.kind === 'date-from' || filter.kind === 'date-to') schema.format = 'date';
+    parameters.push({ in: 'query', name: filter.param, schema });
+  }
+  spec.paths['/api/apex/tables/' + key] = {
+    get: {
+      tags: ['Apex Group'],
+      summary: table.table,
+      description: table.rows + ' rows in ' + table.table + '.' + (table.dateColumn ? ' from and to filter ' + table.dateColumn + '.' : ''),
+      parameters,
+      responses: {
+        200: { description: 'Table rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
+        400: { $ref: '#/components/responses/BadRequest' },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        500: { $ref: '#/components/responses/ServerError' },
+      },
+    },
+  };
+}
 
 const swaggerSpec = swaggerJSDoc({
   definition: spec,
