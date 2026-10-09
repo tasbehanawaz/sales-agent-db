@@ -714,6 +714,71 @@ const spec = {
         },
       },
     },
+    '/api/mfg/metric-summary': {
+      get: {
+        tags: ['Manufacturing - KPIs'],
+        summary: 'Full-range totals for production, quality, cost, inventory, and maintenance',
+        description: 'Sums every row in the date range. No row sample. Use this for plant comparisons. Production returns average good quantity and attainment, not raw totals.',
+        parameters: [
+          {
+            in: 'query',
+            name: 'metric',
+            required: true,
+            schema: { type: 'string', enum: ['production', 'quality', 'cost', 'inventory', 'maintenance'] },
+          },
+          {
+            in: 'query',
+            name: 'group_by',
+            schema: {
+              type: 'string',
+              enum: ['plant', 'line', 'product', 'month', 'type'],
+              default: 'plant',
+            },
+            description: 'plant for every metric. line for production. product for quality. month for production, quality, cost, inventory, and maintenance. type for maintenance.',
+          },
+          { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+          ...dateRangeParams,
+        ],
+        responses: {
+          200: {
+            description: 'Aggregated metric totals',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    count: { type: 'integer', example: 11 },
+                    metric: { type: 'string', example: 'production' },
+                    group_by: { type: 'string', example: 'plant' },
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          label: { type: 'string', example: 'Tokyo Manufacturing' },
+                          run_count: { type: 'integer' },
+                          avg_good: { type: 'number', example: 14891 },
+                          attainment_pct: { type: 'number', example: 94.4 },
+                          rejection_pct: { type: 'number', example: 1.0 },
+                          avg_unit_cost: { type: 'number' },
+                          shortages: { type: 'integer' },
+                          event_count: { type: 'integer' },
+                          maintenance_cost: { type: 'number' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/ServerError' },
+        },
+      },
+    },
     '/api/mfg/downtime-analysis': {
       get: {
         tags: ['Manufacturing - KPIs'],

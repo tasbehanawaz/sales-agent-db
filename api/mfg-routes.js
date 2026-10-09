@@ -1231,6 +1231,201 @@ async function getExecutiveReportData(fromDate, toDate, plantId) {
   };
 }
 
+async function getMetricSummary(req, res) {
+  try {
+    const metric = String(strParam(req.query.metric) || '').toLowerCase();
+    const groupBy = String(strParam(req.query.group_by) || 'plant').toLowerCase();
+    const allowed = {
+      production: ['plant', 'line', 'month'],
+      quality: ['plant', 'product', 'month'],
+      cost: ['plant', 'line', 'month'],
+      inventory: ['plant', 'month'],
+      maintenance: ['plant', 'type', 'month']
+    };
+    if (!allowed[metric] || !allowed[metric].includes(groupBy)) {
+      return res.status(400).json({
+        success: false,
+        error: 'metric must be production, quality, cost, inventory, or maintenance, with a supported group_by'
+      });
+    }
+    const ids = uuidParams(req.query, ['plant_id']);
+    if (ids.error) return res.status(400).json({ success: false, error: ids.error });
+    const plantId = ids.values.plant_id;
+    const fromDate = dateParam(req.query.from);
+    const toDate = dateParam(req.query.to);
+    const params = {};
+    const clauses = [];
+
+    const dateCol = {
+      production: 'r.date',
+      quality: 'q.date',
+      cost: 'c.date',
+      inventory: 'i.date',
+      maintenance: 'CAST(mr.repair_start_datetime AS DATE)'
+    }[metric];
+    const plantCol = metric === 'maintenance' ? 'm.plant_id' : {
+      production: 'r.plant_id',
+      quality: 'q.plant_id',
+      cost: 'c.plant_id',
+      inventory: 'i.plant_id'
+    }[metric];
+    if (plantId) addFilter(clauses, params, 'plant_id', `${plantCol} = @plant_id`, plantId);
+    if (fromDate) addFilter(clauses, params, 'from_date', `${dateCol} >= @from_date`, fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', `${dateCol} <= @to_date`, toDate);
+    const where = whereSql(clauses);
+
+    let sql;
+    if (metric === 'production' && groupBy === 'plant') {
+      sql = `
+        SELECT p.plant_name AS label,
+          COUNT(*) AS run_count,
+          CAST(AVG(CAST(r.good_quantity AS float)) AS decimal(12,0)) AS avg_good,
+          CAST(SUM(CAST(r.good_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(r.planned_quantity AS bigint)), 0) AS decimal(6,1)) AS attainment_pct
+        FROM [${MFG_DB}].dbo.production_runs r
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = r.plant_id
+        ${where}
+        GROUP BY p.plant_name
+        ORDER BY avg_good DESC`;
+    } else if (metric === 'production' && groupBy === 'line') {
+      sql = `
+        SELECT p.plant_name + ' / ' + l.line_name AS label,
+          COUNT(*) AS run_count,
+          CAST(AVG(CAST(r.good_quantity AS float)) AS decimal(12,0)) AS avg_good,
+          CAST(SUM(CAST(r.good_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(r.planned_quantity AS bigint)), 0) AS decimal(6,1)) AS attainment_pct
+        FROM [${MFG_DB}].dbo.production_runs r
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = r.plant_id
+        JOIN [${MFG_DB}].dbo.production_lines l ON l.line_id = r.line_id
+        ${where}
+        GROUP BY p.plant_name, l.line_name
+        ORDER BY avg_good DESC`;
+    } else if (metric === 'production') {
+      sql = `
+        SELECT CONVERT(char(7), r.date, 126) AS label,
+          COUNT(*) AS run_count,
+          CAST(AVG(CAST(r.good_quantity AS float)) AS decimal(12,0)) AS avg_good,
+          CAST(SUM(CAST(r.good_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(r.planned_quantity AS bigint)), 0) AS decimal(6,1)) AS attainment_pct
+        FROM [${MFG_DB}].dbo.production_runs r
+        ${where}
+        GROUP BY CONVERT(char(7), r.date, 126)
+        ORDER BY label`;
+    } else if (metric === 'quality' && groupBy === 'plant') {
+      sql = `
+        SELECT p.plant_name AS label,
+          COUNT(*) AS test_count,
+          CAST(SUM(CAST(q.rejected_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(q.produced_quantity AS bigint)), 0) AS decimal(6,2)) AS rejection_pct
+        FROM [${MFG_DB}].dbo.quality_tests q
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = q.plant_id
+        ${where}
+        GROUP BY p.plant_name
+        ORDER BY rejection_pct DESC`;
+    } else if (metric === 'quality' && groupBy === 'product') {
+      sql = `
+        SELECT pr.product_name AS label,
+          COUNT(*) AS test_count,
+          CAST(SUM(CAST(q.rejected_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(q.produced_quantity AS bigint)), 0) AS decimal(6,2)) AS rejection_pct
+        FROM [${MFG_DB}].dbo.quality_tests q
+        JOIN [${MFG_DB}].dbo.products pr ON pr.product_id = q.product_id
+        ${where}
+        GROUP BY pr.product_name
+        ORDER BY rejection_pct DESC`;
+    } else if (metric === 'quality') {
+      sql = `
+        SELECT CONVERT(char(7), q.date, 126) AS label,
+          COUNT(*) AS test_count,
+          CAST(SUM(CAST(q.rejected_quantity AS bigint)) * 100.0 / NULLIF(SUM(CAST(q.produced_quantity AS bigint)), 0) AS decimal(6,2)) AS rejection_pct
+        FROM [${MFG_DB}].dbo.quality_tests q
+        ${where}
+        GROUP BY CONVERT(char(7), q.date, 126)
+        ORDER BY label`;
+    } else if (metric === 'cost' && groupBy === 'plant') {
+      sql = `
+        SELECT p.plant_name AS label,
+          COUNT(*) AS record_count,
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+        FROM [${MFG_DB}].dbo.cost_records c
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = c.plant_id
+        ${where}
+        GROUP BY p.plant_name
+        ORDER BY avg_unit_cost DESC`;
+    } else if (metric === 'cost' && groupBy === 'line') {
+      sql = `
+        SELECT p.plant_name + ' / ' + l.line_name AS label,
+          COUNT(*) AS record_count,
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+        FROM [${MFG_DB}].dbo.cost_records c
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = c.plant_id
+        JOIN [${MFG_DB}].dbo.production_lines l ON l.line_id = c.line_id
+        ${where}
+        GROUP BY p.plant_name, l.line_name
+        ORDER BY avg_unit_cost DESC`;
+    } else if (metric === 'cost') {
+      sql = `
+        SELECT CONVERT(char(7), c.date, 126) AS label,
+          COUNT(*) AS record_count,
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+        FROM [${MFG_DB}].dbo.cost_records c
+        ${where}
+        GROUP BY CONVERT(char(7), c.date, 126)
+        ORDER BY label`;
+    } else if (metric === 'inventory' && groupBy === 'month') {
+      sql = `
+        SELECT CONVERT(char(7), i.date, 126) AS label,
+          COUNT(*) AS transaction_count,
+          SUM(CAST(i.shortages_quantity AS bigint)) AS shortages
+        FROM [${MFG_DB}].dbo.inventory_transactions i
+        ${where}
+        GROUP BY CONVERT(char(7), i.date, 126)
+        ORDER BY label`;
+    } else if (metric === 'inventory') {
+      sql = `
+        SELECT p.plant_name AS label,
+          COUNT(*) AS transaction_count,
+          SUM(CAST(i.shortages_quantity AS bigint)) AS shortages
+        FROM [${MFG_DB}].dbo.inventory_transactions i
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = i.plant_id
+        ${where}
+        GROUP BY p.plant_name
+        ORDER BY shortages DESC`;
+    } else if (metric === 'maintenance' && groupBy === 'type') {
+      sql = `
+        SELECT mr.maintenance_type AS label,
+          COUNT(*) AS event_count,
+          SUM(mr.maintenance_cost) AS maintenance_cost
+        FROM [${MFG_DB}].dbo.maintenance_records mr
+        JOIN [${MFG_DB}].dbo.machines m ON m.asset_id = mr.asset_id
+        ${where}
+        GROUP BY mr.maintenance_type
+        ORDER BY event_count DESC`;
+    } else if (metric === 'maintenance' && groupBy === 'month') {
+      sql = `
+        SELECT CONVERT(char(7), mr.repair_start_datetime, 126) AS label,
+          COUNT(*) AS event_count,
+          SUM(mr.maintenance_cost) AS maintenance_cost
+        FROM [${MFG_DB}].dbo.maintenance_records mr
+        JOIN [${MFG_DB}].dbo.machines m ON m.asset_id = mr.asset_id
+        ${where}
+        GROUP BY CONVERT(char(7), mr.repair_start_datetime, 126)
+        ORDER BY label`;
+    } else {
+      sql = `
+        SELECT p.plant_name AS label,
+          COUNT(*) AS event_count,
+          SUM(mr.maintenance_cost) AS maintenance_cost
+        FROM [${MFG_DB}].dbo.maintenance_records mr
+        JOIN [${MFG_DB}].dbo.machines m ON m.asset_id = mr.asset_id
+        JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = m.plant_id
+        ${where}
+        GROUP BY p.plant_name
+        ORDER BY event_count DESC`;
+    }
+
+    const data = await query(sql, params);
+    res.json({ success: true, count: data.length, metric, group_by: groupBy, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 // ============= SUMMARY ENDPOINTS =============
 
 async function getProductionSummary(req, res) {
@@ -1502,6 +1697,7 @@ module.exports = {
   getOEEDashboard,
   getDowntimeAnalysis,
   getDowntimeSummary,
+  getMetricSummary,
   getQualityTrends,
 
   // Summaries

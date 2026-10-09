@@ -588,6 +588,7 @@ app.get('/api/mfg/costs', mfgRoutes.getCostRecords);
 app.get('/api/mfg/oee-dashboard', mfgRoutes.getOEEDashboard);
 app.get('/api/mfg/downtime-analysis', mfgRoutes.getDowntimeAnalysis);
 app.get('/api/mfg/downtime-summary', mfgRoutes.getDowntimeSummary);
+app.get('/api/mfg/metric-summary', mfgRoutes.getMetricSummary);
 app.get('/api/mfg/quality-trends', mfgRoutes.getQualityTrends);
 
 // Summary endpoints
