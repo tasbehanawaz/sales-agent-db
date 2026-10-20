@@ -150,9 +150,10 @@ function reportSummary(data, scope) {
   if (kpiLine) paragraphs.push(`Across the whole scope, ${kpiLine}.`);
   const brief = sections
     .map((s, i) => {
-      const lead = (s.narrative && s.narrative[0]) || describeTable(s, `Table ${i + 2}.1`)[0];
+      const lead = (s.narrative && s.narrative[0]) || describeTable(s, 'The table')[0];
       if (!lead) return null;
-      const first = lead.split(/(?<=\.)\s+(?=[A-Z0-9])/).find((x) => !/^Table \d/.test(x)) || lead;
+      const parts = lead.split(/(?<=\.)\s+(?=[A-Z0-9])/);
+      const first = parts.find((x) => !/^The table breaks/.test(x)) || parts[0];
       return `${s.title}: ${first}`;
     })
     .filter(Boolean)

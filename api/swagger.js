@@ -474,6 +474,7 @@ const spec = {
               'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
                 schema: { type: 'string', format: 'binary' },
               },
+              'application/pdf': { schema: { type: 'string', format: 'binary' } },
               'text/csv': { schema: { type: 'string', format: 'binary' } },
             },
           },

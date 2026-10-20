@@ -32,6 +32,9 @@ function q(f, text) {
   return query(text, f.params);
 }
 
+// Preventive work has no failure date; date it by its repair start or due date instead.
+const MAINT_DATE = 'COALESCE(mr.failure_date, CAST(mr.repair_start_datetime AS date), mr.planned_maintenance_due_date)';
+
 const PLANT = (alias) => `JOIN ${t('plants')} p ON p.plant_id = ${alias}.plant_id`;
 
 // ---- sections ----
@@ -79,7 +82,10 @@ const SECTIONS = {
         SUM(CAST(r.good_quantity AS float)) / NULLIF(SUM(r.planned_quantity), 0) * 100 oee
       FROM ${t('production_runs')} r JOIN ${t('production_lines')} l ON l.line_id = r.line_id ${PLANT('r')}
       ${w} GROUP BY l.line_name, p.plant_name ORDER BY oee DESC`);
-    const below = rows.filter((r) => n(r.oee) < 80);
+    // Count against every line, not just the rows shown in the table.
+    const [bench] = await q(f, `SELECT COUNT(*) lines, SUM(CASE WHEN oee < 80 THEN 1 ELSE 0 END) below,
+        MIN(oee) worst FROM (SELECT SUM(CAST(r.good_quantity AS float)) / NULLIF(SUM(r.planned_quantity), 0) * 100 oee
+        FROM ${t('production_runs')} r ${w} GROUP BY r.line_id) x`);
     return {
       id: 'oee',
       title: 'OEE by Production Line',
@@ -89,9 +95,9 @@ const SECTIONS = {
       narrative: [
         `Overall OEE is ${pct(s.oee)}, made up of ${pct(s.availability)} availability and ${pct(s.quality)} quality. ` +
         `Lines ran ${pct(s.runtime)} of their planned production time. ` +
-        (below.length
-          ? `${below.length} of ${rows.length} lines are below the 80% OEE benchmark, led by ${below[below.length - 1].line_name} at ${pct(below[below.length - 1].oee)}.`
-          : `All ${rows.length} lines meet the 80% OEE benchmark.`),
+        (n(bench.below)
+          ? `${count(bench.below)} of ${count(bench.lines)} lines are below the 80% OEE benchmark; the weakest runs at ${pct(bench.worst)}.`
+          : `All ${count(bench.lines)} lines meet the 80% OEE benchmark.`),
       ],
       kpis: [
         { label: 'Overall OEE', value: pct(s.oee), color: 'primary' },
@@ -387,7 +393,7 @@ const SECTIONS = {
   },
 
   async 'maintenance'(f) {
-    const w = where(f, { date: 'mr.failure_date', plant: 'm.plant_id' });
+    const w = where(f, { date: MAINT_DATE, plant: 'm.plant_id' });
     const join = `FROM ${t('maintenance_records')} mr JOIN ${t('machines')} m ON m.asset_id = mr.asset_id`;
     const rows = await q(f, `SELECT mr.maintenance_type, COUNT(*) orders, SUM(mr.labor_hours) labor, SUM(mr.maintenance_cost) cost,
         AVG(DATEDIFF(minute, mr.repair_start_datetime, mr.repair_end_datetime) / 60.0) repair_h,
@@ -424,7 +430,7 @@ const SECTIONS = {
         SUM(mr.maintenance_cost) cost, SUM(mr.labor_hours) labor,
         SUM(CASE WHEN mr.maintenance_type = 'Emergency' THEN 1 ELSE 0 END) emergency
       FROM ${t('maintenance_records')} mr JOIN ${t('machines')} m ON m.asset_id = mr.asset_id
-      ${where(f, { date: 'mr.failure_date', plant: 'm.plant_id' })}
+      ${where(f, { date: MAINT_DATE, plant: 'm.plant_id' })}
       GROUP BY m.machine_name, m.machine_type, m.criticality ORDER BY cost DESC`);
     return {
       id: 'maintenance-assets',

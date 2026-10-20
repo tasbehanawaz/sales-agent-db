@@ -131,7 +131,7 @@ const SECTIONS = {
         COUNT(DISTINCT s.pharmacy_id) pharmacies
       FROM dbo.secondary_sales s JOIN dbo.sales_reps r ON r.rep_id = s.rep_id
       ${where(f, { date: 's.sale_date', region: 's.region' })}
-      GROUP BY r.name, r.territory, r.region ORDER BY value DESC`);
+      GROUP BY r.rep_id, r.name, r.territory, r.region ORDER BY value DESC`);
     return {
       id: 'sales-by-rep',
       title: 'Sales by Representative',
@@ -286,7 +286,7 @@ const SECTIONS = {
         COUNT(DISTINCT c.doctor_id) doctors
       FROM dbo.call_planning c JOIN dbo.sales_reps r ON r.rep_id = c.rep_id
       ${where(f, { date: 'c.planned_date', region: 'r.region' })}
-      GROUP BY r.name, r.region ORDER BY SUM(CASE WHEN c.call_status = 'completed' THEN 1.0 ELSE 0 END) / COUNT(*)`);
+      GROUP BY r.rep_id, r.name, r.region ORDER BY SUM(CASE WHEN c.call_status = 'completed' THEN 1.0 ELSE 0 END) / COUNT(*)`);
     return {
       id: 'calls-by-rep',
       title: 'Call Completion by Representative',
@@ -349,7 +349,7 @@ async function recommendedActions(f) {
     ${where(f, { date: 'sale_date', region: 'region' })} GROUP BY region ORDER BY value`);
   const [rep] = await q(f, `SELECT TOP 1 r.name, SUM(CASE WHEN c.call_status = 'completed' THEN 1.0 ELSE 0 END) / COUNT(*) rate
     FROM dbo.call_planning c JOIN dbo.sales_reps r ON r.rep_id = c.rep_id ${where(f, { date: 'c.planned_date', region: 'r.region' })}
-    GROUP BY r.name ORDER BY rate`);
+    GROUP BY r.rep_id, r.name ORDER BY rate`);
   const [channel] = await q(f, `SELECT TOP 1 ph.channel, COUNT(DISTINCT ph.pharmacy_id) - COUNT(DISTINCT s.pharmacy_id) idle
     FROM dbo.pharmacies ph LEFT JOIN dbo.secondary_sales s ON s.pharmacy_id = ph.pharmacy_id
       ${f.from ? 'AND s.sale_date >= @from_date' : ''} ${f.to ? 'AND s.sale_date <= @to_date' : ''}

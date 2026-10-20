@@ -18,7 +18,7 @@
 - PDF and CSV carry more rows than slides (four times the slide length, at least 50, monthly instead of quarterly trends).
 - Sales reports use real data instead of fixed demo numbers. Sales file names now start with `sales-`
   (for example `sales-overview_<timestamp>.pdf`).
-- Report file names get a random suffix after the timestamp so simultaneous requests never share a file.
+- Report file names get six random digits after the timestamp, so simultaneous requests get separate files.
 
 ## 2026-10-20 (PR #1)
 
