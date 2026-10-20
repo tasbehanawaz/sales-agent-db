@@ -2,8 +2,9 @@ const PDFDocument = require('pdfkit');
 const styleConfig = require('./styleConfig');
 
 /**
- * Manufacturing PDF reports — styled to mirror the PPTX layout:
+ * Manufacturing and Apex PDF reports — styled to mirror the PPTX layout:
  * banner header, KPI cards, zebra tables, insights, page footers.
+ * data.brand names the footer and document title (default Manufacturing).
  */
 class PDFReportGenerator {
   constructor(reportType, data, filters = {}) {
@@ -14,6 +15,7 @@ class PDFReportGenerator {
     this.pageNumber = 0;
     this.margin = 40;
     this.contentBottom = 0;
+    this.brand = (data && data.brand) || 'Manufacturing';
   }
 
   // ---- color helpers (styleConfig stores hex WITHOUT '#') ----
@@ -33,8 +35,8 @@ class PDFReportGenerator {
       bufferPages: true,
       autoFirstPage: true,
       info: {
-        Title: `Manufacturing ${this.reportType} Report`,
-        Author: 'Manufacturing Agent',
+        Title: (this.data && this.data.title) || `${this.brand} ${this.reportType} Report`,
+        Author: `${this.brand} Agent`,
         Creator: 'sales-agent-db',
       },
     });
@@ -47,9 +49,14 @@ class PDFReportGenerator {
     return this.doc.page.width - this.margin * 2;
   }
 
+  /** New page with the same size as the first; PDFKit otherwise defaults to Letter. */
+  addPage() {
+    this.doc.addPage({ size: 'A4', margin: 0 });
+  }
+
   ensureSpace(needed) {
     if (this.doc.y + needed > this.contentBottom) {
-      this.doc.addPage({ margin: 0 });
+      this.addPage();
       this.doc.y = this.margin;
       this.pageNumber += 1;
     }
@@ -59,10 +66,10 @@ class PDFReportGenerator {
   finalizeFooters() {
     const range = this.doc.bufferedPageRange();
     const total = range.count;
-    const footerY = this.doc.page.height - 28;
 
     for (let i = 0; i < total; i++) {
       this.doc.switchToPage(range.start + i);
+      const footerY = this.doc.page.height - 28;
 
       // Use vector ops + absolute text only — never let text auto-flow
       this.doc.save();
@@ -77,7 +84,7 @@ class PDFReportGenerator {
         .font('Helvetica')
         .fontSize(8)
         .fillColor('#888888')
-        .text('Manufacturing Agent Report', this.margin, footerY, {
+        .text(`${this.brand} Agent Report`, this.margin, footerY, {
           width: this.contentWidth() * 0.55,
           align: 'left',
           lineBreak: false,
@@ -120,6 +127,8 @@ class PDFReportGenerator {
       filterBits.push(`Period: ${this.filters.from || '…'} to ${this.filters.to || '…'}`);
     }
     if (this.filters.plant_id) filterBits.push(`Plant: ${this.filters.plant_id}`);
+    if (this.filters.region) filterBits.push(`Region: ${this.filters.region}`);
+    if (this.filters.business_unit) filterBits.push(`Business unit: ${this.filters.business_unit}`);
     filterBits.push(`Generated: ${new Date().toLocaleString()}`);
 
     this.doc
@@ -224,6 +233,14 @@ class PDFReportGenerator {
    * @param {Array<Array<string|number>>} rows
    * @param {number[]} [colWeights] optional relative column weights
    */
+  /** Shorten text with an ellipsis so it fits one table cell line. */
+  fitCell(text, width) {
+    if (this.doc.widthOfString(text) <= width) return text;
+    let s = text;
+    while (s.length > 1 && this.doc.widthOfString(`${s}…`) > width) s = s.slice(0, -1);
+    return `${s}…`;
+  }
+
   addTable(headers, rows, colWeights) {
     if (!headers || !headers.length) return;
 
@@ -249,7 +266,7 @@ class PDFReportGenerator {
     this.doc.font('Helvetica-Bold').fontSize(9).fillColor('#FFFFFF');
     let cx = x0;
     headers.forEach((h, i) => {
-      this.doc.text(String(h), cx + padX, y + 7, {
+      this.doc.text(this.fitCell(String(h), colWidths[i] - padX * 2), cx + padX, y + 7, {
         width: colWidths[i] - padX * 2,
         align: i === 0 ? 'left' : 'center',
         lineBreak: false,
@@ -268,7 +285,7 @@ class PDFReportGenerator {
           .rect(x0, segmentStartY, tableW, y - segmentStartY)
           .stroke();
 
-        this.doc.addPage({ margin: 0 });
+        this.addPage();
         y = this.margin;
         segmentStartY = y;
 
@@ -276,7 +293,7 @@ class PDFReportGenerator {
         this.doc.font('Helvetica-Bold').fontSize(9).fillColor('#FFFFFF');
         cx = x0;
         headers.forEach((h, i) => {
-          this.doc.text(String(h), cx + padX, y + 7, {
+          this.doc.text(this.fitCell(String(h), colWidths[i] - padX * 2), cx + padX, y + 7, {
             width: colWidths[i] - padX * 2,
             align: i === 0 ? 'left' : 'center',
             lineBreak: false,
@@ -309,7 +326,7 @@ class PDFReportGenerator {
           this.doc.fillColor('#333333');
           this.doc.font('Helvetica');
         }
-        this.doc.text(cellStr, cx + padX, y + 5, {
+        this.doc.text(this.fitCell(cellStr, colWidths[i] - padX * 2), cx + padX, y + 5, {
           width: colWidths[i] - padX * 2,
           align: i === 0 ? 'left' : 'center',
           lineBreak: false,
@@ -589,8 +606,9 @@ class PDFReportGenerator {
   }
 
   /**
-   * Custom report built from free-text query topics + live DB sections.
-   * Expects data: { title, topics, kpis[], sections[{title,kpis,table,bullets}], ... }
+   * Sectioned report: manufacturing query topics or an Apex report.
+   * Expects data: { title, subtitle?, topics, kpis[], sections[{title,kpis,table,bullets}], ... }
+   * Builders decide how many rows each table carries; tables paginate.
    */
   async generateQueryDrivenReport() {
     const title = this.data.title || 'Manufacturing Report';
@@ -598,30 +616,26 @@ class PDFReportGenerator {
     const queryHint = this.filters?.query ? String(this.filters.query) : '';
     const subtitle = queryHint
       ? (queryHint.length > 90 ? `${queryHint.slice(0, 87)}…` : queryHint)
-      : `Topics: ${topics}`;
+      : (this.data.subtitle || `Topics: ${topics}`);
 
     this.addHeader(title, subtitle);
 
     if (Array.isArray(this.data.kpis) && this.data.kpis.length) {
       this.addSectionTitle('Overview');
-      this.addKPIGrid(this.data.kpis.slice(0, 4));
+      this.addKPIGrid(this.data.kpis);
     }
 
     const sections = this.data.sections || [];
     for (const section of sections) {
       this.addSectionTitle(section.title || 'Section');
       if (Array.isArray(section.kpis) && section.kpis.length) {
-        this.addKPIGrid(section.kpis.slice(0, 4));
+        this.addKPIGrid(section.kpis);
       }
       if (section.table && section.table.headers && section.table.rows?.length) {
-        this.addTable(
-          section.table.headers,
-          section.table.rows.slice(0, 12),
-          section.table.weights
-        );
+        this.addTable(section.table.headers, section.table.rows, section.table.weights);
       }
       if (Array.isArray(section.bullets) && section.bullets.length) {
-        this.addBulletList(section.bullets.slice(0, 6));
+        this.addBulletList(section.bullets);
       }
     }
 
@@ -648,7 +662,7 @@ class PDFReportGenerator {
     if (!sections.length && !(Array.isArray(this.data.kpis) && this.data.kpis.length)) {
       this.addCallout(
         'No matching data',
-        'Could not build sections for this query. Try naming a topic: OEE, downtime, quality, products, costs, production runs, or lines.',
+        this.data.empty_hint || 'Could not build sections for this query. Try naming a topic: OEE, downtime, quality, products, costs, production runs, or lines.',
         'warning'
       );
     }

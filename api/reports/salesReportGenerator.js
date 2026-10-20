@@ -36,7 +36,7 @@ class SalesReportGenerator {
 
     const dateStr = new Date().toLocaleDateString();
     slide.addText(`Generated: ${dateStr}`, {
-      x: 0.5, y: 6.8, w: 8, h: 0.3,
+      x: 0.5, y: 5.1, w: 8, h: 0.3,
       ...styleConfig.fonts.small,
       color: styleConfig.colors.light,
     });

@@ -55,4 +55,6 @@ logs/
 
 # Generated reports (runtime files)
 api/reports/generated/*.pptx
+api/reports/generated/*.pdf
+api/reports/generated/*.csv
 api/reports/generated/*.xlsx

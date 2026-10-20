@@ -29,55 +29,65 @@ function listTables(req, res) {
   res.json({ success: true, count: data.length, data });
 }
 
+/**
+ * Build the WHERE clauses for one table from request query values.
+ * Returns { clauses, params } or { error } for a value of the wrong type.
+ */
+function tableFilters(spec, q, params) {
+  const clauses = [];
+
+  if (spec.dateColumn) {
+    const fromDate = dateParam(q.from);
+    const toDate = dateParam(q.to);
+    if (fromDate) addFilter(clauses, params, 'from_date', `CAST([${spec.dateColumn}] AS date) >= @from_date`, fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', `CAST([${spec.dateColumn}] AS date) <= @to_date`, toDate);
+  }
+
+  for (const filter of spec.filters) {
+    const column = `[${filter.column}]`;
+    if (filter.kind === 'flag') {
+      const value = flagParam(q[filter.param]);
+      if (value == null && strParam(q[filter.param])) {
+        return { error: filter.param + ' must be 0 or 1' };
+      }
+      if (value != null) addFilter(clauses, params, filter.param, column + ' = @' + filter.param, value);
+    } else if (filter.kind === 'int') {
+      const raw = strParam(q[filter.param]);
+      if (raw == null) continue;
+      const value = parseInt(raw, 10);
+      if (Number.isNaN(value)) {
+        return { error: filter.param + ' must be an integer' };
+      }
+      addFilter(clauses, params, filter.param, column + ' = @' + filter.param, value);
+    } else if (filter.kind === 'date-from' || filter.kind === 'date-to') {
+      const value = dateParam(q[filter.param]);
+      if (!value && strParam(q[filter.param])) {
+        return { error: filter.param + ' must be YYYY-MM-DD' };
+      }
+      if (!value) continue;
+      const op = filter.kind === 'date-from' ? '>=' : '<=';
+      addFilter(clauses, params, filter.param, 'CAST(' + column + ' AS date) ' + op + ' @' + filter.param, value);
+    } else {
+      addFilter(clauses, params, filter.param, column + ' = @' + filter.param, strParam(q[filter.param]));
+    }
+  }
+
+  return { clauses, params };
+}
+
 function handler(key) {
   const spec = TABLES[key];
   return async function getTable(req, res) {
     try {
       const limit = intParam(req.query.limit, spec.defaultLimit, 1, spec.maxLimit);
-      const params = { limit };
-      const clauses = [];
-
-      if (spec.dateColumn) {
-        const fromDate = dateParam(req.query.from);
-        const toDate = dateParam(req.query.to);
-        if (fromDate) addFilter(clauses, params, 'from_date', `CAST([${spec.dateColumn}] AS date) >= @from_date`, fromDate);
-        if (toDate) addFilter(clauses, params, 'to_date', `CAST([${spec.dateColumn}] AS date) <= @to_date`, toDate);
-      }
-
-      for (const filter of spec.filters) {
-        const column = `[${filter.column}]`;
-        if (filter.kind === 'flag') {
-          const value = flagParam(req.query[filter.param]);
-          if (value == null && strParam(req.query[filter.param])) {
-            return res.status(400).json({ success: false, error: filter.param + ' must be 0 or 1' });
-          }
-          if (value != null) addFilter(clauses, params, filter.param, column + ' = @' + filter.param, value);
-        } else if (filter.kind === 'int') {
-          const raw = strParam(req.query[filter.param]);
-          if (raw == null) continue;
-          const value = parseInt(raw, 10);
-          if (Number.isNaN(value)) {
-            return res.status(400).json({ success: false, error: filter.param + ' must be an integer' });
-          }
-          addFilter(clauses, params, filter.param, column + ' = @' + filter.param, value);
-        } else if (filter.kind === 'date-from' || filter.kind === 'date-to') {
-          const value = dateParam(req.query[filter.param]);
-          if (!value && strParam(req.query[filter.param])) {
-            return res.status(400).json({ success: false, error: filter.param + ' must be YYYY-MM-DD' });
-          }
-          if (!value) continue;
-          const op = filter.kind === 'date-from' ? '>=' : '<=';
-          addFilter(clauses, params, filter.param, 'CAST(' + column + ' AS date) ' + op + ' @' + filter.param, value);
-        } else {
-          addFilter(clauses, params, filter.param, column + ' = @' + filter.param, strParam(req.query[filter.param]));
-        }
-      }
+      const filters = tableFilters(spec, req.query, { limit });
+      if (filters.error) return res.status(400).json({ success: false, error: filters.error });
 
       const data = await query(
         `SELECT TOP (@limit) * FROM [${APEX_DB}].dbo.[${spec.table}]
-         ${whereSql(clauses)}
+         ${whereSql(filters.clauses)}
          ORDER BY [${spec.orderBy}] ${spec.orderDir}`,
-        params
+        filters.params
       );
       res.json({
         success: true,
@@ -92,4 +102,4 @@ function handler(key) {
   };
 }
 
-module.exports = { TABLES, listTables, handler };
+module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters };

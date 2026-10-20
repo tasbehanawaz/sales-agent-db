@@ -1,6 +1,11 @@
-# Manufacturing Reports API
+# Reports API
 
-Generate professional PPTX and PDF reports from manufacturing data using report generation endpoints.
+Generate PPTX, PDF and CSV reports from the manufacturing and Apex Group databases (and CSV or PPTX for the sales demo).
+Every endpoint returns JSON with a `download_url`; files are served from `/reports/download/{filename}` without an API key.
+
+- Manufacturing: below.
+- Apex Group: [Apex Group Reports](#apex-group-reports).
+- CSV: [CSV Output](#csv-output).
 
 ## Endpoints
 
@@ -22,7 +27,7 @@ POST /api/mfg/reports/generate-query
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `report_type` | string | Yes | Type of report to generate (see Report Types below) |
-| `format` | string | No | Output format: `pptx` (default) or `pdf` |
+| `format` | string | No | Output format: `pptx` (default), `pdf` or `csv` |
 | `from` | date | No | Start date (YYYY-MM-DD) |
 | `to` | date | No | End date (YYYY-MM-DD) |
 | `plant_id` | string | No | Filter by plant ID (UUID format) |
@@ -32,7 +37,7 @@ POST /api/mfg/reports/generate-query
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | Yes | Natural language query describing desired report (e.g., "show OEE trends", "what's downtime") |
-| `format` | string | No | Output format: `pptx` (default) or `pdf` |
+| `format` | string | No | Output format: `pptx` (default), `pdf` or `csv` |
 | `from` | date | No | Start date (YYYY-MM-DD) |
 | `to` | date | No | End date (YYYY-MM-DD) |
 | `plant_id` | string | No | Filter by plant ID (UUID format) |
@@ -146,8 +151,7 @@ curl -H "X-API-Key: sk_prod_..." \
 
 ## Response
 
-**Success (200):**
-- PPTX file downloaded as `{report_type}_{timestamp}.pptx`
+**Success (200):** JSON with `filename` and `download_url` (`mfg-{report_type}_{timestamp}.{pptx|pdf|csv}`).
 
 **Error (400):**
 ```json
@@ -175,7 +179,7 @@ curl -H "X-API-Key: sk_prod_..." \
 
 ## Report Features
 
-- **Multiple Formats:** Generate as PPTX (PowerPoint) or PDF
+- **Multiple Formats:** Generate as PPTX (PowerPoint), PDF or CSV
 - **Professional Formatting:** Branded slides with consistent styling
 - **Data Visualization:** Tables and KPI boxes for key metrics
 - **Dynamic Content:** Generated from live database queries
@@ -304,3 +308,84 @@ To customize styling, edit `api/reports/styleConfig.js`
 - **File size (PDF):** 300-800 KB
 - **Cache lifetime:** 1 hour (configurable)
 - **Maximum parallel requests:** Unlimited (queued by database)
+
+## Apex Group Reports
+
+```
+GET  /api/apex/reports/generate?report_type=...&format=pptx|pdf|csv
+GET  /api/apex/reports/generate-query?query=...&format=...
+POST /api/apex/reports/generate-query   {"query": "...", "format": "pdf"}
+```
+
+Optional filters on both: `from`, `to` (YYYY-MM-DD), `region` (North, South, East, West), `business_unit`
+(Consumer Markets, Digital Products, Enterprise Solutions, Industrial Operations, Managed Services, Shared Services).
+
+`from`/`to` filter historical facts (scorecard months, ledger, invoices, HR events, control tests).
+Predictions, recommendations and scenarios are one forward-looking snapshot (as of 2026-09-30, forecast months
+2026-10 to 2027-03), so dates never filter them out. Region and business unit apply through each table's org unit,
+entity, region or customer.
+
+### Report Types
+
+| `report_type` | Sections |
+|---|---|
+| `executive-summary` | Scorecard by region/BU, margin bridge, financial forecast, customer risk, workforce risk, control risk, recommendations, scenarios, top issues |
+| `financial-performance` | Scorecard, monthly trend, margin bridge, performance drivers, forecast, budget vs actual, cash by entity, general ledger, manual journals, month-end close |
+| `commercial` | Sales by offering, discount approvals, pipeline, customer segments, customer risk, service cases, AR aging |
+| `workforce` | Headcount by BU, hires/exits/moves, vacancies, attendance, engagement, learning and compensation, attrition risk |
+| `risk-controls` | Control risk, quarterly control scorecard, exceptions, control testing, audit findings, remediation, access/SoD, manual journals, AP, vendors |
+| `recommendations` | Top recommended actions, action catalog, scenario simulation, decision constraints |
+| `full-report` | Every section above plus prediction models, KPI definitions and a data coverage appendix with the live row count of all 48 tables |
+| `table-export` | With `table=<key>` (see `GET /api/apex/tables`): every matching row of one table as CSV. Accepts that table's filters. CSV only, and `format` defaults to `csv`. |
+
+Aliases: `executive`, `finance`, `sales`, `customers`, `hr`, `risk`, `controls`, `audit`, `actions`, `scenarios`, `full`, `all`.
+
+### Query Topics
+
+`generate-query` maps words in the question to sections and can combine several:
+revenue/EBITDA/margin/KPIs, margin bridge/drivers, forecast, budget/variance, cash, ledger/journals, close/reconciliation,
+sales/offerings/channels, discounts/overrides, pipeline/contracts, customers/churn, service/SLA/disputes,
+receivables/DSO/aging, payables/vendors, workforce/headcount/payroll, attrition/exits/hires, vacancies/recruitment,
+attendance/overtime/absence, engagement/learning, controls/exceptions/compliance, audit/remediation, access/SoD,
+risk, recommendations/actions, scenarios/constraints, models/definitions/coverage.
+"full", "complete", "everything" or "all the data" builds `full-report`; a question with no topic builds `executive-summary`.
+
+```bash
+curl -H "X-API-Key: sk_prod_..." \
+  "http://localhost:3000/api/apex/reports/generate?report_type=full-report&format=pdf"
+
+curl -H "X-API-Key: sk_prod_..." \
+  "http://localhost:3000/api/apex/reports/generate-query?query=customer%20churn%20and%20receivables&format=pptx&region=West"
+
+# All 140,000 general ledger lines as CSV
+curl -H "X-API-Key: sk_prod_..." \
+  "http://localhost:3000/api/apex/reports/generate?report_type=table-export&table=fact-gl-transaction"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "report_type": "full-report",
+  "title": "Apex Group Full Report",
+  "sections": ["Executive Scorecard by Region and Business Unit", "..."],
+  "format": "pdf",
+  "filename": "apex-full-report_1792478606725.pdf",
+  "download_url": "https://api-vertx.gigh.com/reports/download/apex-full-report_1792478606725.pdf"
+}
+```
+
+Measured against the live database: `full-report` takes about 10 seconds (43 sections, 25 PDF pages or 77 slides);
+other report types take 4 to 6 seconds; exporting all of `fact-gl-transaction` takes about 16 seconds (16 MB).
+
+## CSV Output
+
+`format=csv` works on every report endpoint (manufacturing, Apex, sales).
+
+- Sectioned reports (Apex and manufacturing `generate-query`) write one block per section: a title row, a
+  `Metric,Value,Unit` block for the KPIs, the section table, then notes. Blocks are separated by a blank line.
+- Fixed manufacturing and sales templates write their raw values: scalars as `Field,Value` rows and lists as tables.
+- Files are UTF-8 with a byte order mark so Excel reads them correctly.
+- For raw rows instead of a summary, use Apex `report_type=table-export`.
+
