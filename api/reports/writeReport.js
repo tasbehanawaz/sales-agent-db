@@ -14,8 +14,9 @@ fs.mkdirSync(reportsDir, { recursive: true });
  */
 async function writeReport({ prefix, format, reportType, data, filters = {}, slug }) {
   const base = [prefix, slug || reportType].filter(Boolean).join('-');
-  // Millisecond time plus a random tail, so two requests never share a file.
-  const filename = `${base}_${Date.now()}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}.${format}`;
+  // Millisecond time plus six random digits: two requests in the same
+  // millisecond clash one time in a million.
+  const filename = `${base}_${Date.now()}${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}.${format}`;
   const filepath = path.join(reportsDir, filename);
 
   if (format === 'pdf') {
