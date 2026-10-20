@@ -62,7 +62,7 @@ const spec = {
     { name: 'Sales - Core', description: 'Core sales entities' },
     { name: 'Sales - Analytics', description: 'Aggregated sales analytics' },
     { name: 'Sales - Insights', description: 'Forecasts and recommended actions' },
-    { name: 'Sales - Reports', description: 'PPTX report generation and downloads' },
+    { name: 'Sales - Reports', description: 'PPTX, PDF and CSV report generation and downloads' },
     { name: 'Manufacturing - Dimensions', description: 'Plants, lines, machines, products' },
     { name: 'Manufacturing - Facts', description: 'Production, downtime, quality, maintenance, inventory, cost' },
     { name: 'Manufacturing - KPIs', description: 'OEE, downtime analysis, quality trends' },
@@ -430,15 +430,17 @@ const spec = {
     '/api/sales/reports/generate': {
       get: {
         tags: ['Sales - Reports'],
-        summary: 'Generate a sales report (PPTX or CSV)',
+        summary: 'Generate a sales report (PPTX, PDF or CSV) from the sales database',
         parameters: [
           {
             in: 'query',
             name: 'report_type',
             required: true,
-            schema: { type: 'string', enum: ['sales-overview', 'doctor-distribution', 'pharmacy-network'] },
+            schema: { type: 'string', enum: ['sales-overview', 'doctor-distribution', 'pharmacy-network', 'full-report'] },
           },
-          { in: 'query', name: 'format', schema: { type: 'string', enum: ['pptx', 'csv'], default: 'pptx' } },
+          { in: 'query', name: 'format', schema: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx' } },
+          ...dateRangeParams,
+          { in: 'query', name: 'region', schema: { type: 'string', enum: ['Central', 'East', 'North', 'South', 'West'] } },
         ],
         responses: {
           200: {
@@ -462,12 +464,12 @@ const spec = {
             in: 'path',
             name: 'filename',
             required: true,
-            schema: { type: 'string', pattern: '^[a-z-]+_\\d+\\.(pptx|csv)$' },
+            schema: { type: 'string', pattern: '^[a-z-]+_\\d+\\.(pptx|pdf|csv)$' },
           },
         ],
         responses: {
           200: {
-            description: 'PPTX or CSV file download',
+            description: 'PPTX, PDF or CSV file download',
             content: {
               'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
                 schema: { type: 'string', format: 'binary' },
@@ -868,7 +870,7 @@ const spec = {
             required: true,
             schema: {
               type: 'string',
-              enum: ['oee-dashboard', 'downtime-analysis', 'quality-trends', 'cost-analysis', 'executive-summary'],
+              enum: ['oee-dashboard', 'downtime-analysis', 'quality-trends', 'cost-analysis', 'executive-summary', 'full-report'],
             },
             description: 'Type of manufacturing report to generate',
           },

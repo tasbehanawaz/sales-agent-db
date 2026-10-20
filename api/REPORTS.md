@@ -1,11 +1,16 @@
 # Reports API
 
-Generate PPTX, PDF and CSV reports from the manufacturing and Apex Group databases (and CSV or PPTX for the sales demo).
-Every endpoint returns JSON with a `download_url`; files are served from `/reports/download/{filename}` without an API key.
+Generate PPTX, PDF and CSV reports from the sales, manufacturing and Apex Group databases.
+Every endpoint returns JSON with a `download_url`. Manufacturing and Apex files are served from `/reports/download/{filename}`
+without an API key; sales files from `/api/sales/reports/download/{filename}` with the API key.
+
+Each request builds one report from one domain's database only, and writes it to its own new file named
+`{sales|mfg|apex}-{type}_{timestamp}.{pptx|pdf|csv}`. Reports never combine data across domains or requests.
 
 - Manufacturing: below.
+- Sales: [Sales Reports](#sales-reports).
 - Apex Group: [Apex Group Reports](#apex-group-reports).
-- CSV: [CSV Output](#csv-output).
+- Formats: [PDF Output](#pdf-output), [CSV Output](#csv-output).
 
 ## Endpoints
 
@@ -44,62 +49,17 @@ POST /api/mfg/reports/generate-query
 
 ## Report Types
 
-### 1. OEE Dashboard Report
-```
-report_type=oee-dashboard
-```
-**Includes:**
-- Overall OEE percentage
-- Availability, Performance, Quality component breakdown
-- OEE trends by line
-- Top and bottom performing lines
-- Key insights and recommendations
+| `report_type` | Sections |
+|---|---|
+| `oee-dashboard` | OEE by line, production output by line, monthly production trend, production by shift |
+| `downtime-analysis` | Downtime by cause (Pareto), downtime by line, maintenance by type, machines with the highest maintenance cost |
+| `quality-trends` | Quality by product, inspection results and severity, scrap reasons, production by product |
+| `cost-analysis` | Cost by line against standard, cost components by plant, material shortages and usage variance |
+| `executive-summary` | Plant footprint, OEE, production, downtime, quality, cost, maintenance, materials, priority issues |
+| `full-report` | Every manufacturing section |
 
-### 2. Downtime Analysis Report
-```
-report_type=downtime-analysis
-```
-**Includes:**
-- Total downtime hours and incident count
-- Average downtime duration
-- Pareto analysis (top 20 downtime drivers)
-- Recurring failure patterns
-- Impact by equipment/line
-- Maintenance recommendations
-
-### 3. Quality Trends Report
-```
-report_type=quality-trends
-```
-**Includes:**
-- Average yield percentage
-- Rejection rates
-- Quality metrics by product/line
-- Defect trend analysis
-- Product quality variance
-- Process improvement suggestions
-
-### 4. Cost Analysis Report
-```
-report_type=cost-analysis
-```
-**Includes:**
-- Average cost per unit
-- Energy cost and intensity
-- Scrap cost impact
-- Cost by production line
-- Cost variance analysis
-- Efficiency recommendations
-
-### 5. Executive Summary
-```
-report_type=executive-summary
-```
-**Includes:**
-- Key KPIs (OEE, Yield, Cost, Downtime)
-- Top 5 priority issues
-- Recommended actions (30-day plan)
-- Cross-functional impact summary
+Every report ends with recommended actions calculated from the data (the largest downtime cause, the lowest OEE line,
+the highest rejection rate, the largest cost overrun, the material most often short).
 
 ## Usage Examples
 
@@ -199,16 +159,20 @@ Use `/api/mfg/reports/generate?report_type=...` only when the user explicitly pi
 
 ### Supported Topics
 
-| Topic | Example phrases | DB sections included |
-|-------|-----------------|----------------------|
-| `oee` | OEE, availability, equipment effectiveness | OEE KPIs + by-line table |
-| `lines` | production lines, lines | OEE + production output by line |
-| `production` | production runs, output, throughput | Run counts / good vs actual qty by line |
-| `downtime` | downtime, failure, breakdown, pareto | Downtime KPIs + reason Pareto |
-| `quality` | quality, yield, rejection, defect | Yield / rejection KPIs |
-| `products` | products, SKU | Quality-by-product table |
-| `costs` | cost, energy, labor, unit cost | Cost KPIs + by-line |
-| `executive` | executive, overview, KPIs (fallback) | Cross-metric executive summary |
+| Topic | Example phrases | Sections included |
+|-------|-----------------|-------------------|
+| `oee` | OEE, availability, equipment effectiveness | OEE by line |
+| `lines` | production lines, lines | OEE and production by line |
+| `production` | production runs, output, throughput, trend | Production by line, monthly trend |
+| `downtime` | downtime, failure, breakdown, pareto | Downtime by cause and by line |
+| `quality` | quality, yield, rejection, defect, scrap | Quality by product, inspection results, scrap reasons |
+| `products` | products, SKU | Production and quality by product |
+| `costs` | cost, energy, labour, unit cost | Cost by line, cost components |
+| `shifts` | shift, changeover, cycle time | Production by shift |
+| `maintenance` | maintenance, repairs, work orders, machines | Maintenance by type, costliest machines |
+| `inventory` | inventory, materials, shortages, suppliers | Material shortages and usage variance |
+| `plants` | plants, sites, operators | Plant footprint |
+| `executive` | no topic matched | Executive summary sections |
 
 Multi-topic queries work (e.g. "downtime and quality" → both sections).
 
@@ -281,9 +245,8 @@ To customize styling, edit `api/reports/styleConfig.js`
 
 ### PDF Reports
 - **Library:** pdfkit - JavaScript PDF generation library
-- **File location:** `api/reports/pdfReportGenerator.js`
-- **Format:** Portable Document Format (.pdf)
-- **Use case:** Document archival, email distribution, printing
+- **File location:** `api/reports/pdfReportGenerator.js`, written analysis in `api/reports/narrative.js`
+- **Format:** Portable Document Format (.pdf), a written document rather than a copy of the slides (see [PDF Output](#pdf-output))
 
 ### Common Features
 - **SQL queries:** Aggregated manufacturing data
@@ -381,13 +344,40 @@ Response:
 Measured against the live database: `full-report` takes about 10 seconds (43 sections, 25 PDF pages or 77 slides);
 other report types take 4 to 6 seconds; exporting all of `fact-gl-transaction` takes about 16 seconds (16 MB).
 
+## Sales Reports
+
+```
+GET /api/sales/reports/generate?report_type=...&format=pptx|pdf|csv&from=YYYY-MM-DD&to=YYYY-MM-DD&region=...
+```
+
+Built from `sales_agent_demo` (secondary sales, products, pharmacies, doctors, representatives, call planning).
+`from`/`to` filter sale and call dates; `region` is Central, East, North, South or West.
+
+| `report_type` | Sections |
+|---|---|
+| `sales-overview` | Sales by region, sales trend, sales by product, sales by therapy area, sales by representative |
+| `doctor-distribution` | Doctors by specialty and tier, doctor coverage by region, call completion by type, call completion by representative |
+| `pharmacy-network` | Pharmacies by channel, top pharmacies, sales by product |
+| `full-report` | Every sales section |
+
+## PDF Output
+
+`format=pdf` produces a written report, not a copy of the slide deck:
+
+- A title block with the scope, generation time and section count, then a contents list.
+- An executive summary: an overview paragraph, a key-figures table, an "In brief" point for each section, and the priority issues.
+- Numbered sections. Each has a one-line description of what it measures, a written analysis generated from the
+  figures (leaders and laggards, concentration, ranges), a key-figures table, the detail table and notes.
+- Recommended actions, then "About this report": scope, filters and the source tables used.
+
+PDF and CSV fetch more rows than slides: ranked tables carry four times the slide length, at least 50 rows, and trends are monthly rather than quarterly.
+
 ## CSV Output
 
 `format=csv` works on every report endpoint (manufacturing, Apex, sales).
 
-- Sectioned reports (Apex and manufacturing `generate-query`) write one block per section: a title row, a
-  `Metric,Value,Unit` block for the KPIs, the section table, then notes. Blocks are separated by a blank line.
-- Fixed manufacturing and sales templates write their raw values: scalars as `Field,Value` rows and lists as tables.
+- Every report writes one block per section: a title row, its description, a `Metric,Value,Unit` block for the
+  KPIs, the section table, then notes. Blocks are separated by a blank line.
 - Files are UTF-8 with a byte order mark so Excel reads them correctly.
 - Text cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets don't run them as formulas.
 - For raw rows instead of a summary, use Apex `report_type=table-export`.
