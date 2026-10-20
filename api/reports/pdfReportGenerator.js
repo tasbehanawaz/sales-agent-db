@@ -105,8 +105,9 @@ class PDFReportGenerator {
     this.doc.moveDown(0.3);
   }
 
+  /** Captions are kept on the same page as the header and first rows of their table. */
   caption(text) {
-    this.ensureSpace(40);
+    this.ensureSpace(100);
     this.doc.font('Helvetica-Bold').fontSize(9).fillColor(MUTED)
       .text(text, this.margin, this.doc.y, { width: this.width() });
     this.doc.moveDown(0.25);
@@ -121,11 +122,10 @@ class PDFReportGenerator {
   table(headers, rows, weights) {
     if (!headers || !headers.length) return;
     const w = weights && weights.length === headers.length ? weights : headers.map(() => 1);
-    const sum = w.reduce((a, b) => a + b, 0);
-    const colW = w.map((x) => (this.width() * x) / sum);
     const pad = 4;
     const size = headers.length > 7 ? 7.5 : 8.5;
-    const numericCol = headers.map((_, i) => rows.length > 0 && rows.every((r) => r[i] == null || r[i] === '' || parseCell(r[i])));
+    const colW = this.columnWidths(headers, rows, w, size, pad);
+    const numericCol = headers.map((_, i) => rows.length > 0 && rows.every((r) => r[i] == null || r[i] === '' || r[i] === '-' || parseCell(r[i])));
 
     const rowHeight = (cells, font) => {
       this.doc.font(font).fontSize(size);
@@ -168,12 +168,39 @@ class PDFReportGenerator {
     this.doc.y = y + 10;
   }
 
+  /**
+   * Split the width by weight, but never make a column narrower than its
+   * longest word, so headers and labels wrap between words, not inside them.
+   */
+  columnWidths(headers, rows, weights, size, pad) {
+    const total = this.width();
+    const longest = (text, font) => {
+      this.doc.font(font).fontSize(size);
+      return Math.max(0, ...String(text ?? '').split(/\s+/).map((word) => this.doc.widthOfString(word)));
+    };
+    const minW = headers.map((h, i) => Math.max(
+      longest(h, 'Helvetica-Bold'),
+      ...rows.slice(0, 60).map((r) => longest(r[i], 'Helvetica'))
+    ) + pad * 2 + 1);
+    const sum = weights.reduce((a, b) => a + b, 0);
+    let widths = weights.map((x) => (total * x) / sum);
+    if (minW.reduce((a, b) => a + b, 0) > total) return widths;
+    for (let pass = 0; pass < 5; pass++) {
+      const short = widths.map((wd, i) => wd < minW[i]);
+      if (!short.some(Boolean)) break;
+      const fixed = widths.reduce((a, wd, i) => a + (short[i] ? minW[i] : 0), 0);
+      const flexSum = weights.reduce((a, x, i) => a + (short[i] ? 0 : x), 0);
+      widths = widths.map((wd, i) => (short[i] ? minW[i] : ((total - fixed) * weights[i]) / flexSum));
+    }
+    return widths;
+  }
+
   /** Key figures as a four-column Measure | Value | Measure | Value table. */
   keyFigures(kpis) {
     if (!Array.isArray(kpis) || !kpis.length) return;
     const rows = [];
     for (let i = 0; i < kpis.length; i += 2) {
-      const cell = (k) => (k ? [k.label, `${k.value}${k.unit ? ` ${k.unit}` : ''}`] : ['', '']);
+      const cell = (k) => (k ? [`${k.label}${k.unit ? ` (${k.unit})` : ''}`, k.value] : ['', '']);
       rows.push([...cell(kpis[i]), ...cell(kpis[i + 1])]);
     }
     this.table(['Measure', 'Value', 'Measure', 'Value'], rows, [2, 1.2, 2, 1.2]);

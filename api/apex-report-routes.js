@@ -1093,6 +1093,7 @@ const SECTIONS = {
       ],
       table: {
         headers: ['Scenario', 'Investment', 'Headcount Growth', 'EBITDA %', 'DSO', 'Attrition', 'Ctrl Risk', '6-Mo Net Cash', 'Rev. Growth', 'Execution Risk'],
+        describe: false,
         rows: rows.map((r) => [`${r.scenario_id}${n(r.recommended_flag) ? ' *' : ''}`, money(n(r.investment_usd_m) * 1e6),
           pct(r.net_headcount_growth_pct), pct(r.ebitda_margin_pct), count(r.dso_days), pct(r.cohort_attrition_pct),
           count(r.control_risk_index), money(n(r.six_month_net_cash_benefit_usd_m) * 1e6), pct(r.revenue_growth_pct), r.execution_risk]),
@@ -1109,6 +1110,7 @@ const SECTIONS = {
       title: 'Decision Constraints by Scenario',
       table: {
         headers: ['Scenario', 'Constraint', 'Operator', 'Value', 'Unit', 'Mandatory'],
+        describe: false,
         rows: rows.map((r) => [r.scenario_id, r.constraint_name, r.operator, r.constraint_value, r.unit, n(r.mandatory_flag) ? 'Yes' : 'No']),
         weights: [1.2, 2.4, 0.8, 0.8, 0.9, 0.9],
       },
@@ -1155,6 +1157,7 @@ const SECTIONS = {
       title: 'Prediction Models',
       table: {
         headers: ['Model', 'Version', 'Method', 'Training Window', 'Approved', 'Owner', 'Intended Use'],
+        describe: false,
         rows: models.map((m) => [m.model_name, m.model_version, m.method,
           `${new Date(m.training_start).toISOString().slice(0, 7)} to ${new Date(m.training_end).toISOString().slice(0, 7)}`,
           n(m.approved_flag) ? 'Yes' : 'No', m.owner, m.intended_use]),
@@ -1171,6 +1174,7 @@ const SECTIONS = {
       title: 'KPI Definitions and Source Catalog',
       table: {
         headers: ['KPI', 'Unit', 'Definition', 'Authoritative Source'],
+        describe: false,
         rows: kpis.map((k) => [k.kpi_name, k.unit, k.definition, k.authoritative_source]),
         weights: [1.3, 0.8, 3.2, 1.8],
       },

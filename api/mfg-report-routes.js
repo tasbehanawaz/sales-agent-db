@@ -210,18 +210,18 @@ const SECTIONS = {
     const [s] = await q(f, `SELECT COUNT(*) events, SUM(duration_minutes) / 60.0 hours, AVG(CAST(duration_minutes AS float)) avg_min,
         SUM(CASE WHEN planned_vs_unplanned = 'Unplanned' THEN duration_minutes ELSE 0 END) / 60.0 unplanned
       FROM ${t('downtime_events')} ${w}`);
-    const rows = await q(f, `SELECT TOP ${limit(f, 10)} ISNULL(failure_mode, ISNULL(reason_code, category)) reason, category,
+    const rows = await q(f, `SELECT TOP ${limit(f, 10)} ISNULL(failure_mode, ISNULL(reason_code, category)) reason,
         COUNT(*) events, SUM(duration_minutes) / 60.0 hours, AVG(CAST(duration_minutes AS float)) avg_min,
         SUM(CASE WHEN planned_vs_unplanned = 'Unplanned' THEN 1 ELSE 0 END) unplanned
       FROM ${t('downtime_events')} ${w}
-      GROUP BY ISNULL(failure_mode, ISNULL(reason_code, category)), category ORDER BY hours DESC`);
+      GROUP BY ISNULL(failure_mode, ISNULL(reason_code, category)) ORDER BY hours DESC`);
     const cats = await q(f, `SELECT category, COUNT(*) events, SUM(duration_minutes) / 60.0 hours FROM ${t('downtime_events')} ${w}
       GROUP BY category ORDER BY hours DESC`);
     const top3 = rows.slice(0, 3).reduce((x, r) => x + n(r.hours), 0);
     return {
       id: 'downtime',
       title: 'Downtime by Cause (Pareto)',
-      about: 'Downtime events grouped by failure mode, ordered by hours lost.',
+      about: 'Downtime events grouped by failure mode, ordered by hours lost. The notes split the hours by category.',
       sources: ['downtime_events'],
       narrative: [
         `${count(s.events)} downtime events cost ${dec(s.hours)} hours, an average of ${dec(s.avg_min, 0)} minutes each. ` +
@@ -235,9 +235,9 @@ const SECTIONS = {
         { label: 'Unplanned Share', value: share(s.unplanned, s.hours), color: 'danger' },
       ],
       table: {
-        headers: ['Cause', 'Category', 'Events', 'Hours', '% of Hours', 'Avg (min)', 'Unplanned Events'],
-        rows: rows.map((r) => [r.reason, r.category, count(r.events), dec(r.hours), share(r.hours, s.hours), dec(r.avg_min), count(r.unplanned)]),
-        weights: [1.8, 1.2, 0.8, 0.9, 1, 0.9, 1.2],
+        headers: ['Cause', 'Events', 'Hours', '% of Hours', 'Avg (min)', 'Unplanned Events'],
+        rows: rows.map((r) => [r.reason, count(r.events), dec(r.hours), share(r.hours, s.hours), dec(r.avg_min), count(r.unplanned)]),
+        weights: [1.8, 0.8, 0.9, 1, 0.9, 1.2],
         metric: 'Hours',
       },
       bullets: cats.map((c) => `${c.category}: ${count(c.events)} events, ${dec(c.hours)} hours (${share(c.hours, s.hours)})`),
