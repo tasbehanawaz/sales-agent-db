@@ -4,10 +4,8 @@ const fs = require('fs');
  * CSV reports. One file, one block per section, blocks separated by a blank
  * line so the file opens cleanly in Excel or Sheets.
  *
- * Sectioned data ({ title, kpis, sections[{ title, kpis, table, bullets }] })
- * is written block by block. Any other report data (the fixed manufacturing
- * and sales templates) is written field by field: scalars as Field,Value rows
- * and arrays of objects as tables.
+ * Report data ({ title, kpis, sections[{ title, about, kpis, table, bullets }] })
+ * is written block by block, the same sections the PDF and slides show.
  */
 
 function csvCell(value) {
@@ -79,6 +77,7 @@ class CSVReportGenerator {
 
     for (const section of this.data.sections || []) {
       this.push([section.title || 'Section']);
+      if (section.about) this.push([section.about]);
       if (section.kpis?.length) {
         this.addKpis(section.kpis);
         if (section.table?.rows?.length || section.bullets?.length) this.blank();
@@ -108,47 +107,8 @@ class CSVReportGenerator {
     }
   }
 
-  writeValue(label, value) {
-    if (Array.isArray(value)) {
-      if (!value.length) return;
-      this.push([label]);
-      if (value.every((v) => v && typeof v === 'object' && !(v instanceof Date))) {
-        const headers = [...new Set(value.flatMap((v) => Object.keys(v)))];
-        this.addTable(headers, value.map((v) => headers.map((h) => v[h])));
-      } else {
-        for (const v of value) this.push([v]);
-      }
-      this.blank();
-    } else if (value && typeof value === 'object' && !(value instanceof Date)) {
-      const scalars = Object.entries(value).filter(([, v]) => v == null || typeof v !== 'object' || v instanceof Date);
-      if (scalars.length) {
-        this.push([label]);
-        this.push(['Field', 'Value']);
-        for (const [k, v] of scalars) this.push([humanize(k), v]);
-        this.blank();
-      }
-      for (const [k, v] of Object.entries(value)) {
-        if (v && typeof v === 'object' && !(v instanceof Date)) this.writeValue(`${label} - ${humanize(k)}`, v);
-      }
-    }
-  }
-
-  generateRaw() {
-    this.addHeader(humanize(this.reportType));
-    const scalars = Object.entries(this.data).filter(([, v]) => v == null || typeof v !== 'object' || v instanceof Date);
-    if (scalars.length) {
-      this.push(['Field', 'Value']);
-      for (const [k, v] of scalars) this.push([humanize(k), v]);
-      this.blank();
-    }
-    for (const [k, v] of Object.entries(this.data)) {
-      if (v && typeof v === 'object' && !(v instanceof Date)) this.writeValue(humanize(k), v);
-    }
-  }
-
   async generateReport() {
-    if (Array.isArray(this.data.sections)) this.generateSectioned();
-    else this.generateRaw();
+    this.generateSectioned();
     return this;
   }
 

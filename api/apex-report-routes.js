@@ -18,6 +18,7 @@ const { strParam, dateParam } = require('./queryParams');
 const { TABLES, APEX_DB, tableFilters } = require('./apex-table-routes');
 const { FORMATS, reportsDir, writeReport, downloadUrl } = require('./reports/writeReport');
 const { csvLine } = require('./reports/csvReportGenerator');
+const { n, money, count, dec, frac, pct, share, monthLabel, limit } = require('./reports/format');
 const fs = require('fs');
 const path = require('path');
 
@@ -27,58 +28,14 @@ function t(name) {
   return `[${APEX_DB}].dbo.[${name}]`;
 }
 
-// ---- formatting ----
-
-function n(v) {
-  const x = Number(v);
-  return Number.isFinite(x) ? x : 0;
-}
-
-function money(v) {
-  const x = n(v);
-  const abs = Math.abs(x);
-  const sign = x < 0 ? '-' : '';
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}$${abs.toFixed(0)}`;
-}
-
-function count(v) {
-  return Math.round(n(v)).toLocaleString('en-US');
-}
-
-function dec(v, digits = 1) {
-  return n(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-/** Fraction (0.45) to "45.0%" */
-function frac(v, digits = 1) {
-  return `${(n(v) * 100).toFixed(digits)}%`;
-}
-
-/** Value already in percent (16.5) to "16.5%" */
-function pct(v, digits = 1) {
-  return `${n(v).toFixed(digits)}%`;
-}
-
-function share(part, whole) {
-  return n(whole) ? frac(n(part) / n(whole)) : '0.0%';
-}
-
-function monthLabel(monthId) {
-  const s = String(monthId);
-  return `${s.slice(0, 4)}-${s.slice(4, 6)}`;
-}
-
 // ---- filters ----
 
 /**
  * Request filters plus the derived month, date_id and quarter bounds used by
  * tables keyed by month_id (YYYYMM), date_id (YYYYMMDD) or quarter_id (2026Q3).
  */
-function buildFilters({ from, to, region, business_unit }) {
-  const f = { from, to, region, business_unit };
+function buildFilters({ from, to, region, business_unit, detail }) {
+  const f = { from, to, region, business_unit, detail };
   const params = {};
   if (from) {
     params.from = from;
@@ -372,7 +329,7 @@ const SECTIONS = {
     const [s] = await q(f, `SELECT COUNT(*) journals, SUM(amount) amount, SUM(late_posting_flag) late,
         SUM(weekend_posting_flag) weekend, SUM(round_amount_flag) round_amt, SUM(same_preparer_approver_flag) same_person,
         AVG(risk_score) risk FROM ${t('fact_manual_journal')} ${w}`);
-    const top = await q(f, `SELECT TOP 15 manual_journal_id, posting_date, org_unit_id, amount, late_posting_flag,
+    const top = await q(f, `SELECT TOP ${limit(f, 15)} manual_journal_id, posting_date, org_unit_id, amount, late_posting_flag,
         weekend_posting_flag, round_amount_flag, same_preparer_approver_flag, risk_score
       FROM ${t('fact_manual_journal')} ${w} ORDER BY risk_score DESC, amount DESC`);
     const yn = (v) => (n(v) ? 'Yes' : '');
@@ -549,7 +506,7 @@ const SECTIONS = {
     const bands = await q(f, `SELECT r.risk_band, COUNT(DISTINCT r.customer_id) customers, SUM(r.revenue_at_risk) revenue_at_risk,
         SUM(r.cash_at_risk) cash_at_risk, AVG(r.churn_probability) churn, AVG(r.late_payment_probability) late
       FROM ${t('pred_customer_risk')} r ${w} GROUP BY r.risk_band ORDER BY revenue_at_risk DESC`);
-    const top = await q(f, `SELECT TOP 15 c.customer_name, c.segment, c.region, SUM(r.revenue_at_risk) revenue_at_risk,
+    const top = await q(f, `SELECT TOP ${limit(f, 15)} c.customer_name, c.segment, c.region, SUM(r.revenue_at_risk) revenue_at_risk,
         SUM(r.cash_at_risk) cash_at_risk, MAX(r.churn_probability) churn, MAX(r.risk_band) risk_band, MAX(r.driver_1) driver
       FROM ${t('pred_customer_risk')} r JOIN ${t('dim_customer')} c ON c.customer_id = r.customer_id
       ${w} GROUP BY c.customer_name, c.segment, c.region ORDER BY revenue_at_risk DESC`);
@@ -571,7 +528,7 @@ const SECTIONS = {
       },
     }, {
       id: 'customer-risk-top',
-      title: 'Top 15 Customers by Revenue at Risk',
+      title: `Top ${top.length} Customers by Revenue at Risk`,
       table: {
         headers: ['Customer', 'Segment', 'Region', 'Revenue at Risk', 'Cash at Risk', 'Max Churn', 'Band', 'Top Driver'],
         rows: top.map((r) => [r.customer_name, r.segment, r.region, money(r.revenue_at_risk), money(r.cash_at_risk),
@@ -896,7 +853,7 @@ const SECTIONS = {
         SUM(expected_exception_count) exceptions, SUM(expected_monetary_exposure) exposure,
         SUM(CASE WHEN risk_band = 'High' THEN 1 ELSE 0 END) high
       FROM ${t('pred_control_risk')} ${w} GROUP BY process ORDER BY exposure DESC`);
-    const top = await q(f, `SELECT TOP 10 entity, region, process, forecast_quarter, material_exception_probability, expected_monetary_exposure,
+    const top = await q(f, `SELECT TOP ${limit(f, 10)} entity, region, process, forecast_quarter, material_exception_probability, expected_monetary_exposure,
         risk_band, driver_1 FROM ${t('pred_control_risk')} ${w} ORDER BY expected_monetary_exposure DESC`);
     const sum = (k) => rows.reduce((s, r) => s + n(r[k]), 0);
     return [{
@@ -915,7 +872,7 @@ const SECTIONS = {
       },
     }, {
       id: 'control-risk-top',
-      title: 'Top 10 Entity-Process Control Risks',
+      title: `Top ${top.length} Entity-Process Control Risks`,
       table: {
         headers: ['Entity', 'Region', 'Process', 'Quarter', 'Material Exc. Prob.', 'Exposure', 'Band', 'Top Driver'],
         rows: top.map((r) => [r.entity, r.region, r.process, r.forecast_quarter, frac(r.material_exception_probability),
@@ -1080,7 +1037,7 @@ const SECTIONS = {
 
   async 'recommendations'(f) {
     const w = where(f, { extra: scopeFilter(f, 'r.scope_id') });
-    const rows = await q(f, `SELECT TOP 20 c.action_name, c.[function] fn, r.scope_id, r.net_financial_benefit_usd net,
+    const rows = await q(f, `SELECT TOP ${limit(f, 20)} c.action_name, c.[function] fn, r.scope_id, r.net_financial_benefit_usd net,
         r.implementation_cost_usd cost, r.cash_benefit_usd cash, r.risk_reduction_points risk, r.confidence_score confidence,
         r.priority_score priority, r.accountable_owner_role owner, r.time_to_impact_days days
       FROM ${t('action_recommendation')} r LEFT JOIN ${t('action_catalog')} c ON c.action_id = r.action_id
@@ -1090,7 +1047,7 @@ const SECTIONS = {
       FROM ${t('action_recommendation')} r ${w}`);
     return {
       id: 'recommendations',
-      title: 'Top 20 Recommended Actions by Priority',
+      title: `Top ${rows.length} Recommended Actions by Priority`,
       kpis: [
         { label: 'Recommendations', value: count(s.recs), color: 'primary' },
         { label: 'Net Benefit', value: money(s.net), color: 'success' },
@@ -1444,12 +1401,63 @@ async function recommendedActions(f) {
   }));
 }
 
+/** What each section measures, shown under its heading in the PDF. */
+const ABOUT = {
+  'scorecard': 'Prepared monthly scorecard totals for each region and business unit over the period. EBITDA % is EBITDA over revenue.',
+  'scorecard-trend': 'Company totals for each scorecard month: revenue, profit, people, receivables and control exceptions.',
+  'margin-bridge': 'How the EBITDA margin moved from the start to the end of the comparison period, one driver at a time.',
+  'latent-drivers': 'Modelled performance indexes averaged by business unit; 1.00 is the baseline and higher demand or control maturity is better.',
+  'financial-forecast': 'Six-month model forecast of revenue, EBITDA and cash under each planning scenario, with the forecast range.',
+  'budget': 'Budget, forecast and actual amounts by plan version and account category.',
+  'cash': 'Cash inflows and outflows over the period and the latest closing balance for each legal entity.',
+  'general-ledger': 'Journal lines posted to the general ledger, by financial statement and account category.',
+  'manual-journals': 'Manual journal entries ranked by risk score, with the red flags that drive the score.',
+  'close': 'Month-end close and reconciliation tasks: lateness, adjustments and reconciliation exceptions.',
+  'sales': 'Net revenue, gross margin and discount for each product or service offering.',
+  'discounts': 'Discount requests against policy limits, and how many were overridden.',
+  'pipeline': 'Open and closed contract opportunities by stage; weighted value is booking value times win probability.',
+  'customers': 'Monthly customer health by segment: revenue, margin, payment days, disputes and service.',
+  'customer-risk': 'Model forecast of churn and late payment, grouped by risk band.',
+  'customer-risk-top': 'Individual customers with the most revenue at risk over the forecast horizon.',
+  'customer-service': 'Customer service cases by type, with SLA breaches, disputes and credit notes.',
+  'receivables': 'Outstanding customer invoices by days past due.',
+  'payables': 'Supplier invoices by status, with payment-control red flags.',
+  'vendors': 'The vendor master by category, criticality, risk rating and approval status.',
+  'vendor-changes': 'Changes to vendor master data such as bank details, with the flags that suggest payment fraud risk.',
+  'workforce': 'Employees in the latest month of the period, by business unit.',
+  'hires-exits': 'Hires, exits and internal transfers, with exit reasons.',
+  'vacancies': 'Open and filled vacancies, time to fill and recruitment cost.',
+  'attendance': 'Scheduled, worked, overtime and absence hours by business unit.',
+  'engagement': 'Engagement survey scores by performance band.',
+  'learning': 'Learning, certification and pay events, with hours and pay change.',
+  'workforce-risk': 'Model forecast of attrition by role cohort, with the capacity gap and the revenue or service impact.',
+  'control-risk': 'Model forecast of material control exceptions by process.',
+  'control-risk-top': 'Entity and process pairs with the highest expected exception exposure.',
+  'control-scorecard': 'Quarterly control exceptions, high-risk and repeat exceptions, and monetary exposure.',
+  'control-exceptions': 'Control exceptions raised in the period, by type.',
+  'control-tests': 'Control tests performed in the period by process, and how many found the control effective.',
+  'audit-findings': 'Internal audit findings by severity, with monetary exposure.',
+  'remediation': 'Actions raised to fix audit findings, and how many are overdue.',
+  'access': 'System access events and segregation-of-duties conflicts.',
+  'recommendations': 'Recommended actions ranked by priority score, with expected benefit and cost.',
+  'action-catalog': 'The library of actions the recommendation engine can choose from, by function.',
+  'scenarios': 'Outcomes of each investment scenario; the asterisk marks the recommended one.',
+  'constraints': 'Limits each scenario has to respect.',
+  'data-coverage': 'Every table in the Apex database, its row count, and the report sections that use it.',
+  'models': 'The prediction models behind the forecast and risk sections.',
+  'kpi-definitions': 'How each headline KPI is defined, and which source is authoritative.',
+};
+
 /** Company-level sections with no org unit, region or customer to filter on. */
 const UNSCOPED = new Set(['margin-bridge', 'action-catalog', 'scenarios', 'constraints', 'data-coverage', 'models', 'kpi-definitions']);
 
 async function buildReportData({ title, subtitle, sections, topics, executive }, f) {
   const built = await Promise.all(sections.map(async (id) => {
     const out = [].concat(await SECTIONS[id](f));
+    for (const sec of out) {
+      sec.about = ABOUT[sec.id];
+      sec.sources = SECTION_TABLES[id];
+    }
     if (UNSCOPED.has(id) && (f.region || f.business_unit)) {
       for (const sec of out) sec.bullets = [...(sec.bullets || []), 'Company-level data: not filtered by region or business unit.'];
     }
@@ -1530,8 +1538,9 @@ function reportFormat(value) {
   return FORMATS.includes(format) ? format : null;
 }
 
-function requestFilters(src) {
+function requestFilters(src, format) {
   return buildFilters({
+    detail: format !== 'pptx',
     from: dateParam(src.from),
     to: dateParam(src.to),
     region: strParam(src.region),
@@ -1583,7 +1592,7 @@ async function generateReport(req, res) {
       });
     }
 
-    const f = requestFilters(req.query);
+    const f = requestFilters(req.query, format);
     const spec = REPORT_TYPES[reportType];
     const data = await buildReportData({ ...spec, topics: [reportType] }, f);
     const filename = await writeReport({
@@ -1622,7 +1631,7 @@ async function generateReportQuery(req, res) {
     const plan = analyzeQuery(userQuery);
     const fixed = REPORT_TYPES[plan.reportType];
     const title = fixed ? fixed.title : reportTitleFromQuery(userQuery, plan.topics);
-    const f = requestFilters(src);
+    const f = requestFilters(src, format);
     const data = await buildReportData({
       title,
       subtitle: fixed ? fixed.subtitle : undefined,

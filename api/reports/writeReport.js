@@ -12,7 +12,7 @@ fs.mkdirSync(reportsDir, { recursive: true });
  * Render report data to reports/generated in the requested format.
  * Returns the filename; the file is served by /reports/download/:filename.
  */
-async function writeReport({ prefix, format, reportType, data, filters = {}, slug, Pptx = ReportGenerator }) {
+async function writeReport({ prefix, format, reportType, data, filters = {}, slug }) {
   const base = [prefix, slug || reportType].filter(Boolean).join('-');
   const filename = `${base}_${Date.now()}.${format}`;
   const filepath = path.join(reportsDir, filename);
@@ -26,7 +26,7 @@ async function writeReport({ prefix, format, reportType, data, filters = {}, slu
     await generator.generateReport();
     await generator.save(filepath);
   } else {
-    const generator = new Pptx(reportType, data, filters);
+    const generator = new ReportGenerator(reportType, data, filters);
     const prs = await generator.generateReport();
     await prs.writeFile({ fileName: filepath });
   }
