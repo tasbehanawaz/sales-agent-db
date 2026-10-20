@@ -14,7 +14,8 @@ fs.mkdirSync(reportsDir, { recursive: true });
  */
 async function writeReport({ prefix, format, reportType, data, filters = {}, slug }) {
   const base = [prefix, slug || reportType].filter(Boolean).join('-');
-  const filename = `${base}_${Date.now()}.${format}`;
+  // Millisecond time plus a random tail, so two requests never share a file.
+  const filename = `${base}_${Date.now()}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}.${format}`;
   const filepath = path.join(reportsDir, filename);
 
   if (format === 'pdf') {
