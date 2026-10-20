@@ -396,7 +396,14 @@ async function generateReport(req, res) {
     if (f.region) f.params.region = f.region;
 
     const data = await buildReportData(spec, f);
-    const filename = await writeReport({ format, reportType, data, filters: { from: f.from, to: f.to, region: f.region } });
+    const filename = await writeReport({
+      prefix: 'sales',
+      slug: reportType.replace(/^sales-/, ''),
+      format,
+      reportType,
+      data,
+      filters: { from: f.from, to: f.to, region: f.region },
+    });
 
     res.json({
       success: true,
