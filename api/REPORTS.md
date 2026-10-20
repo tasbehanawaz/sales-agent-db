@@ -324,6 +324,8 @@ Optional filters on both: `from`, `to` (YYYY-MM-DD), `region` (North, South, Eas
 Predictions, recommendations and scenarios are one forward-looking snapshot (as of 2026-09-30, forecast months
 2026-10 to 2027-03), so dates never filter them out. Region and business unit apply through each table's org unit,
 entity, region or customer.
+The margin bridge, action catalog, scenarios, decision constraints, models, KPI definitions and data coverage are
+company-level; with a region or business unit filter they carry a note saying so.
 
 ### Report Types
 
@@ -387,5 +389,6 @@ other report types take 4 to 6 seconds; exporting all of `fact-gl-transaction` t
   `Metric,Value,Unit` block for the KPIs, the section table, then notes. Blocks are separated by a blank line.
 - Fixed manufacturing and sales templates write their raw values: scalars as `Field,Value` rows and lists as tables.
 - Files are UTF-8 with a byte order mark so Excel reads them correctly.
+- Text cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets don't run them as formulas.
 - For raw rows instead of a summary, use Apex `report_type=table-export`.
 

@@ -1444,8 +1444,17 @@ async function recommendedActions(f) {
   }));
 }
 
+/** Company-level sections with no org unit, region or customer to filter on. */
+const UNSCOPED = new Set(['margin-bridge', 'action-catalog', 'scenarios', 'constraints', 'data-coverage', 'models', 'kpi-definitions']);
+
 async function buildReportData({ title, subtitle, sections, topics, executive }, f) {
-  const built = await Promise.all(sections.map((id) => SECTIONS[id](f)));
+  const built = await Promise.all(sections.map(async (id) => {
+    const out = [].concat(await SECTIONS[id](f));
+    if (UNSCOPED.has(id) && (f.region || f.business_unit)) {
+      for (const sec of out) sec.bullets = [...(sec.bullets || []), 'Company-level data: not filtered by region or business unit.'];
+    }
+    return out;
+  }));
   const [kpis, issues, actions] = await Promise.all([
     overviewKpis(f),
     executive ? topIssues(f) : [],
@@ -1474,8 +1483,8 @@ async function exportTable(tableKey, reqQuery) {
   if (filters.error) return { error: filters.error };
 
   const filename = `apex-table-${tableKey}_${Date.now()}.csv`;
-  const out = fs.createWriteStream(path.join(reportsDir, filename));
-  out.write('﻿');
+  const filepath = path.join(reportsDir, filename);
+  const out = fs.createWriteStream(filepath);
 
   const pool = await getPool();
   const request = pool.request();
@@ -1483,25 +1492,34 @@ async function exportTable(tableKey, reqQuery) {
   for (const [k, v] of Object.entries(filters.params)) request.input(k, v);
 
   let rows = 0;
-  await new Promise((resolve, reject) => {
-    let columns = null;
-    request.on('recordset', (cols) => {
-      columns = Object.keys(cols);
-      out.write(csvLine(columns));
+  try {
+    await new Promise((resolve, reject) => {
+      out.on('error', reject);
+      out.write('﻿');
+      let columns = null;
+      request.on('recordset', (cols) => {
+        columns = Object.keys(cols);
+        out.write(csvLine(columns));
+      });
+      request.on('row', (row) => {
+        rows += 1;
+        if (!out.write(csvLine(columns.map((c) => row[c])))) {
+          request.pause();
+          out.once('drain', () => request.resume());
+        }
+      });
+      request.on('error', reject);
+      request.on('done', resolve);
+      request.query(`SELECT * FROM [${APEX_DB}].dbo.[${spec.table}] ${filters.clauses.length ? 'WHERE ' + filters.clauses.join(' AND ') : ''}
+        ORDER BY [${spec.orderBy}] ${spec.orderDir}`);
     });
-    request.on('row', (row) => {
-      rows += 1;
-      if (!out.write(csvLine(columns.map((c) => row[c])))) {
-        request.pause();
-        out.once('drain', () => request.resume());
-      }
-    });
-    request.on('error', reject);
-    request.on('done', resolve);
-    request.query(`SELECT * FROM [${APEX_DB}].dbo.[${spec.table}] ${filters.clauses.length ? 'WHERE ' + filters.clauses.join(' AND ') : ''}
-      ORDER BY [${spec.orderBy}] ${spec.orderDir}`);
-  });
-  await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
+    await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
+  } catch (err) {
+    // Never leave a partial CSV behind a download link.
+    out.destroy();
+    await fs.promises.unlink(filepath).catch(() => {});
+    throw err;
+  }
   return { filename, rows, table: spec.table };
 }
 
@@ -1530,6 +1548,9 @@ async function generateReport(req, res) {
     const tableKey = strParam(req.query.table);
     const rawType = strParam(req.query.report_type);
     const exporting = rawType === 'table-export' || (tableKey && !rawType);
+    if (tableKey && !exporting) {
+      return res.status(400).json({ success: false, error: 'table is only used with report_type=table-export' });
+    }
     const format = exporting && !strParam(req.query.format) ? 'csv' : reportFormat(req.query.format);
     if (!format) return res.status(400).json({ success: false, error: `format must be one of ${FORMATS.join(', ')}` });
 

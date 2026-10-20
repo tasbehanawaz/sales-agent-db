@@ -12,7 +12,16 @@ const fs = require('fs');
 
 function csvCell(value) {
   if (value == null) return '';
-  const s = value instanceof Date ? value.toISOString().slice(0, 10) : String(value);
+  let s;
+  if (value instanceof Date) {
+    const iso = value.toISOString();
+    s = iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
+  } else {
+    s = String(value);
+    // Files are served without auth and opened in Excel/Sheets: a text cell
+    // starting with = + - @ would run as a formula. Plain numbers stay numeric.
+    if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
+  }
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
