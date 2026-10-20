@@ -14,8 +14,9 @@ const mfgRoutes = require('./mfg-routes');
 const apexRoutes = require('./apex-routes');
 const apexTableRoutes = require('./apex-table-routes');
 const apexReportRoutes = require('./apex-report-routes');
-const SalesReportGenerator = require('./reports/salesReportGenerator');
-const { reportsDir, writeReport } = require('./reports/writeReport');
+const mfgReportRoutes = require('./mfg-report-routes');
+const salesReportRoutes = require('./sales-report-routes');
+const { reportsDir } = require('./reports/writeReport');
 const swaggerUi = require('swagger-ui-express');
 const { swaggerSpec } = require('./swagger');
 
@@ -625,59 +626,13 @@ app.post('/api/apex/reports/generate-query', apexReportRoutes.generateReportQuer
 app.get('/api/apex/reports/generate-query', apexReportRoutes.generateReportQuery);
 
 // Report generation
-app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);
-// Query-based report generation (supports format parameter: pptx or pdf)
-app.post('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
-app.get('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
+app.get('/api/mfg/reports/generate', mfgReportRoutes.generateReport);
+// Query-based report generation (format: pptx, pdf or csv)
+app.post('/api/mfg/reports/generate-query', mfgReportRoutes.generateReportQuery);
+app.get('/api/mfg/reports/generate-query', mfgReportRoutes.generateReportQuery);
 
-// Sales reports (no DB required - demo only)
-app.get('/api/sales/reports/generate', async (req, res) => {
-  try {
-    const reportType = strParam(req.query.report_type);
-    const format = (strParam(req.query.format) || 'pptx').toLowerCase();
-
-    if (!reportType || !['sales-overview', 'doctor-distribution', 'pharmacy-network'].includes(reportType)) {
-      return res.status(400).json({ success: false, error: 'Invalid report_type (sales-overview|doctor-distribution|pharmacy-network)' });
-    }
-    if (!['pptx', 'csv'].includes(format)) {
-      return res.status(400).json({ success: false, error: 'format must be pptx or csv' });
-    }
-
-    // Demo data (for testing without manufacturing DB)
-    const demoData = {
-      'sales-overview': {
-        stats: { rep_count: 15, doctor_count: 250, pharmacy_count: 45, region_count: 6 }
-      },
-      'doctor-distribution': {
-        doctor_data: { total: 250, active: 240, regions: 6, avg_calls: 8 }
-      },
-      'pharmacy-network': {
-        pharmacy_data: { total: 45, chains: 18, independent: 27, avg_products: 120 }
-      }
-    };
-
-    const filename = await writeReport({
-      format,
-      reportType,
-      data: demoData[reportType] || {},
-      Pptx: SalesReportGenerator,
-    });
-
-    const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/reports/download/${filename}`;
-
-    res.json({
-      success: true,
-      report_type: reportType,
-      format,
-      filename: filename,
-      download_url: downloadUrl,
-      message: 'Report generated successfully. Use download_url to download.'
-    });
-  } catch (err) {
-    console.error('Report generation error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+// Sales reports
+app.get('/api/sales/reports/generate', salesReportRoutes.generateReport);
 
 // Download report file
 app.get('/api/sales/reports/download/:filename', (req, res) => {
@@ -685,7 +640,7 @@ app.get('/api/sales/reports/download/:filename', (req, res) => {
     const filename = req.params.filename;
 
     // Security: validate filename format to prevent directory traversal
-    if (!/^[a-z-]+_\d+\.(pptx|csv)$/.test(filename)) {
+    if (!/^[a-z-]+_\d+\.(pptx|pdf|csv)$/.test(filename)) {
       return res.status(400).json({ success: false, error: 'Invalid filename format' });
     }
 
