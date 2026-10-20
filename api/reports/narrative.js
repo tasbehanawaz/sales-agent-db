@@ -22,9 +22,12 @@ function parseCell(cell) {
   return null;
 }
 
+/** "Sales Value" → "sales value"; acronyms such as SKU, OEE and EBITDA keep their case. */
 function lower(header) {
-  return /^[A-Z]{2,}/.test(header) ? header : header.charAt(0).toLowerCase() + header.slice(1);
+  return String(header).split(' ').map((w) => (/^[A-Z0-9]{2,}/.test(w) ? w : w.toLowerCase())).join(' ');
 }
+
+const TIME_LABEL = /^(month|quarter|period|year|week|date|day)$/i;
 
 /** Averages, rates and indexes do not add up across rows. */
 function additive(header, kind) {
@@ -42,13 +45,16 @@ function columnInfo(table) {
   });
 }
 
+/** First label column names the row; any others follow in brackets: "Calvin Watkins (East-A, East)". */
 function rowLabel(row, labelCols) {
-  return labelCols.map((c) => row[c.i]).filter((v) => v != null && String(v).trim() && v !== '-').join(' ');
+  const [name, ...rest] = labelCols.map((c) => row[c.i]).filter((v) => v != null && String(v).trim() && v !== '-');
+  return rest.length ? `${name} (${rest.join(', ')})` : String(name ?? '');
 }
 
 function describeTable(section, tableRef) {
   const table = section.table;
-  if (!table || !table.rows || !table.rows.length) return [];
+  // describe: false for tables whose rows are not comparable (mixed units, definitions).
+  if (!table || !table.rows || !table.rows.length || table.describe === false) return [];
   const cols = columnInfo(table);
   const firstNumeric = cols.findIndex((c) => c.numeric);
   if (firstNumeric <= 0) return [];
@@ -63,7 +69,8 @@ function describeTable(section, tableRef) {
     .filter((x) => x.value != null && x.label);
   if (!items.length) return [];
 
-  const dimension = labelCols.map((c) => lower(c.header)).join(' and ');
+  const dimension = lower(labelCols[0].header);
+  const timeSeries = TIME_LABEL.test(labelCols[0].header);
   const sentences = [];
 
   if (items.length === 1) {
@@ -77,13 +84,15 @@ function describeTable(section, tableRef) {
     sentences.push(`${tableRef} breaks the data down by ${dimension} across ${items.length} rows.`);
     if (top.value === bottom.value) {
       sentences.push(`Every row shows the same ${lower(metric.header)} (${top.cell}).`);
+    } else if (timeSeries) {
+      sentences.push(`${metric.header} peaked at ${top.cell} in ${top.label} and was lowest at ${bottom.cell} in ${bottom.label}.`);
     } else {
       sentences.push(
         `${top.label} has the highest ${lower(metric.header)} at ${top.cell}` +
         (sums ? `, ${((top.value / total) * 100).toFixed(1)}% of the total` : '') +
         `, and ${bottom.label} the lowest at ${bottom.cell}.`
       );
-      if (sums && sorted.length >= 6) {
+      if (sums && sorted.length >= 6 && !timeSeries) {
         const top3 = sorted.slice(0, 3).reduce((s, x) => s + x.value, 0);
         sentences.push(`The top three account for ${((top3 / total) * 100).toFixed(1)}% of ${lower(metric.header)}.`);
       } else if (!sums && sorted.length >= 3) {
@@ -143,7 +152,7 @@ function reportSummary(data, scope) {
     .map((s, i) => {
       const lead = (s.narrative && s.narrative[0]) || describeTable(s, `Table ${i + 2}.1`)[0];
       if (!lead) return null;
-      const first = lead.split(/(?<=\.)\s+(?=[A-Z])/).find((x) => !/^Table \d/.test(x)) || lead;
+      const first = lead.split(/(?<=\.)\s+(?=[A-Z0-9])/).find((x) => !/^Table \d/.test(x)) || lead;
       return `${s.title}: ${first}`;
     })
     .filter(Boolean)
