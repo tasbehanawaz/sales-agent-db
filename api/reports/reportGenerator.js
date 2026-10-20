@@ -47,7 +47,7 @@ class ReportGenerator {
     // Date footer
     const dateStr = new Date().toLocaleDateString();
     slide.addText(`Generated: ${dateStr}`, {
-      x: 0.5, y: 6.8, w: 8, h: 0.3,
+      x: 0.5, y: 5.1, w: 8, h: 0.3,
       ...styleConfig.fonts.small,
       color: styleConfig.colors.light,
     });
@@ -88,7 +88,7 @@ class ReportGenerator {
     slide.addText(value, {
       x, y: y + 0.2, w: 1.8, h: 0.5,
       align: 'center',
-      fontSize: 28,
+      fontSize: String(value).length > 6 ? 20 : 28,
       bold: true,
       color: 'FFFFFF',
     });
@@ -101,10 +101,13 @@ class ReportGenerator {
     });
   }
 
-  addTable(slide, x, y, w, h, data) {
+  addTable(slide, x, y, w, h, data, weights) {
+    const sum = weights ? weights.reduce((a, b) => a + b, 0) : 0;
     slide.addTable(data, {
       x, y, w, h,
-      colW: data[0]?.map(() => (w / data[0].length)),
+      colW: weights && weights.length === data[0]?.length
+        ? weights.map((wt) => (w * wt) / sum)
+        : data[0]?.map(() => (w / data[0].length)),
       border: { pt: 1, color: 'CCCCCC' },
       fill: { color: styleConfig.colors.light },
       fontSize: 10,
@@ -343,64 +346,93 @@ class ReportGenerator {
     return this.prs;
   }
 
+  /** KPI boxes, four per row. Returns the y below the last row. */
+  addKPIRows(slide, kpis, y) {
+    kpis.forEach((kpi, i) => {
+      this.addKPIBox(
+        slide,
+        0.5 + (i % 4) * 2.1,
+        y + Math.floor(i / 4) * 1.4,
+        kpi.label || '',
+        String(kpi.value ?? ''),
+        kpi.unit || '',
+        kpi.color || 'primary'
+      );
+    });
+    return y + (Math.ceil(kpis.length / 4) - 1) * 1.4 + 1.2;
+  }
+
+  /**
+   * Sectioned report: manufacturing query topics or an Apex report.
+   * A table longer than one slide continues on "(cont.)" slides; notes go
+   * under the table when they fit, else on their own slide, so no row or
+   * bullet is dropped.
+   */
   async generateQueryDrivenReport() {
     const title = this.data.title || 'Manufacturing Report';
     const topics = (this.data.topics || []).join(', ') || 'custom';
     const queryHint = this.filters?.query ? String(this.filters.query) : '';
     const subtitle = queryHint
       ? (queryHint.length > 90 ? `${queryHint.slice(0, 87)}…` : queryHint)
-      : `Topics: ${topics}`;
+      : (this.data.subtitle || `Topics: ${topics}`);
 
     this.addTitleSlide(title, subtitle);
 
     if (Array.isArray(this.data.kpis) && this.data.kpis.length) {
       this.addContentSlide('Overview', (slide) => {
-        this.data.kpis.slice(0, 4).forEach((kpi, i) => {
-          this.addKPIBox(
-            slide,
-            0.5 + i * 2.1,
-            0.9,
-            kpi.label || '',
-            String(kpi.value ?? ''),
-            kpi.unit || '',
-            kpi.color || 'primary'
-          );
-        });
+        this.addKPIRows(slide, this.data.kpis.slice(0, 8), 0.9);
       });
     }
 
+    const slideBottom = 5.45;
+    const rowH = 0.28;
+    const bulletH = 0.4;
+    const width = 9;
+
     for (const section of this.data.sections || []) {
-      this.addContentSlide(section.title || 'Section', (slide) => {
-        let y = 0.9;
-        if (Array.isArray(section.kpis) && section.kpis.length) {
-          section.kpis.slice(0, 4).forEach((kpi, i) => {
-            this.addKPIBox(
-              slide,
-              0.5 + i * 2.1,
-              y,
-              kpi.label || '',
-              String(kpi.value ?? ''),
-              kpi.unit || '',
-              kpi.color || 'primary'
-            );
-          });
-          y = 2.3;
-        }
-        if (section.table && section.table.headers && section.table.rows?.length) {
-          const tableData = [
-            section.table.headers,
-            ...section.table.rows.slice(0, 8).map((row) => row.map((c) => String(c ?? ''))),
-          ];
-          this.addTable(slide, 0.5, y, 8, Math.min(4.5, 0.4 + tableData.length * 0.4), tableData);
-        } else if (Array.isArray(section.bullets) && section.bullets.length) {
-          section.bullets.slice(0, 6).forEach((b, i) => {
-            slide.addText(`• ${b}`, {
-              x: 0.8, y: y + i * 0.55, w: 8, h: 0.5,
-              ...styleConfig.fonts.body,
-            });
-          });
-        }
-      });
+      const sectionTitle = section.title || 'Section';
+      const kpis = Array.isArray(section.kpis) ? section.kpis : [];
+      const table = section.table && section.table.headers && section.table.rows?.length ? section.table : null;
+      const bullets = Array.isArray(section.bullets) ? section.bullets : [];
+
+      const weights = table && table.weights && table.weights.length === table.headers.length
+        ? table.weights
+        : table ? table.headers.map(() => 1) : [];
+      const weightSum = weights.reduce((a, b) => a + b, 0);
+      const maxChars = weights.map((wt) => Math.max(6, Math.floor(((width * wt) / weightSum) * 13)));
+      const clip = (cell, i) => {
+        const str = String(cell ?? '');
+        return str.length > maxChars[i] ? `${str.slice(0, maxChars[i] - 1)}…` : str;
+      };
+
+      let rows = table ? table.rows.map((row) => row.map(clip)) : [];
+      let first = true;
+      let notesPlaced = !bullets.length;
+      do {
+        this.addContentSlide(first ? sectionTitle : `${sectionTitle} (cont.)`, (slide) => {
+          let y = 0.9;
+          if (first && kpis.length) y = this.addKPIRows(slide, kpis, y) + 0.15;
+          if (table) {
+            const fit = Math.max(1, Math.floor((slideBottom - y) / rowH) - 1);
+            const chunk = rows.slice(0, fit);
+            rows = rows.slice(fit);
+            const tableData = [table.headers.map(clip), ...chunk];
+            this.addTable(slide, 0.5, y, width, rowH * tableData.length, tableData, weights);
+            y += rowH * tableData.length + 0.15;
+          }
+          if (!rows.length && !notesPlaced && y + bullets.length * bulletH <= slideBottom) {
+            this.addBullets(slide, bullets, y, bulletH);
+            notesPlaced = true;
+          }
+        });
+        first = false;
+      } while (rows.length);
+
+      if (!notesPlaced) {
+        this.addContentSlide(`${sectionTitle}: Notes`, (slide) => {
+          this.addBullets(slide, bullets.slice(0, 11), 0.9, bulletH);
+        });
+      }
     }
 
     if (this.data.is_executive && (this.data.top_issues || []).length) {
@@ -432,6 +464,15 @@ class ReportGenerator {
     }
 
     return this.prs;
+  }
+
+  addBullets(slide, bullets, y, step) {
+    bullets.forEach((b, i) => {
+      slide.addText(`• ${b}`, {
+        x: 0.8, y: y + i * step, w: 8.5, h: step,
+        ...styleConfig.fonts.body,
+      });
+    });
   }
 
   async save(filename) {

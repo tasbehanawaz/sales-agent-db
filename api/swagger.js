@@ -430,7 +430,7 @@ const spec = {
     '/api/sales/reports/generate': {
       get: {
         tags: ['Sales - Reports'],
-        summary: 'Generate a sales PPTX report',
+        summary: 'Generate a sales report (PPTX or CSV)',
         parameters: [
           {
             in: 'query',
@@ -438,6 +438,7 @@ const spec = {
             required: true,
             schema: { type: 'string', enum: ['sales-overview', 'doctor-distribution', 'pharmacy-network'] },
           },
+          { in: 'query', name: 'format', schema: { type: 'string', enum: ['pptx', 'csv'], default: 'pptx' } },
         ],
         responses: {
           200: {
@@ -461,16 +462,17 @@ const spec = {
             in: 'path',
             name: 'filename',
             required: true,
-            schema: { type: 'string', pattern: '^[a-z-]+_\\d+\\.pptx$' },
+            schema: { type: 'string', pattern: '^[a-z-]+_\\d+\\.(pptx|csv)$' },
           },
         ],
         responses: {
           200: {
-            description: 'PPTX file download',
+            description: 'PPTX or CSV file download',
             content: {
               'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
                 schema: { type: 'string', format: 'binary' },
               },
+              'text/csv': { schema: { type: 'string', format: 'binary' } },
             },
           },
           400: { $ref: '#/components/responses/BadRequest' },
@@ -482,20 +484,20 @@ const spec = {
     '/reports/download/{filename}': {
       get: {
         tags: ['Manufacturing - Reports'],
-        summary: 'Download a generated manufacturing report (PPTX or PDF, no auth)',
+        summary: 'Download a generated manufacturing or Apex report (PPTX, PDF or CSV, no auth)',
         security: [],
         parameters: [
           {
             in: 'path',
             name: 'filename',
             required: true,
-            schema: { type: 'string', pattern: '^mfg-[a-z-]+_\\d+\\.(pptx|pdf)$' },
-            description: 'Generated report filename (mfg-{type}_{timestamp}.pptx or .pdf)',
+            schema: { type: 'string', pattern: '^(mfg|apex)-[a-z0-9-]+_\\d+\\.(pptx|pdf|csv)$' },
+            description: 'Generated report filename ({mfg|apex}-{type}_{timestamp}.pptx, .pdf or .csv)',
           },
         ],
         responses: {
           200: {
-            description: 'Report file download (PPTX or PDF)',
+            description: 'Report file download (PPTX, PDF or CSV)',
             content: {
               'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
                 schema: { type: 'string', format: 'binary' },
@@ -503,6 +505,7 @@ const spec = {
               'application/pdf': {
                 schema: { type: 'string', format: 'binary' },
               },
+              'text/csv': { schema: { type: 'string', format: 'binary' } },
             },
           },
           400: { $ref: '#/components/responses/BadRequest' },
@@ -857,7 +860,7 @@ const spec = {
     '/api/mfg/reports/generate': {
       get: {
         tags: ['Manufacturing - Reports'],
-        summary: 'Generate a manufacturing report (PPTX or PDF)',
+        summary: 'Generate a manufacturing report (PPTX, PDF or CSV)',
         parameters: [
           {
             in: 'query',
@@ -872,8 +875,8 @@ const spec = {
           {
             in: 'query',
             name: 'format',
-            schema: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx' },
-            description: 'Output format: pptx (PowerPoint) or pdf',
+            schema: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx' },
+            description: 'Output format: pptx (PowerPoint), pdf, or csv',
           },
           { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant UUID' },
           ...dateRangeParams,
@@ -907,8 +910,8 @@ const spec = {
           {
             in: 'query',
             name: 'format',
-            schema: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx' },
-            description: 'Output format: pptx (PowerPoint) or pdf',
+            schema: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx' },
+            description: 'Output format: pptx (PowerPoint), pdf, or csv',
           },
           { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' }, description: 'Filter by plant UUID' },
           ...dateRangeParams,
@@ -938,7 +941,7 @@ const spec = {
                 required: ['query'],
                 properties: {
                   query: { type: 'string', description: 'Natural language query' },
-                  format: { type: 'string', enum: ['pptx', 'pdf'], default: 'pptx', description: 'Output format' },
+                  format: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx', description: 'Output format' },
                   plant_id: { type: 'string', format: 'uuid', description: 'Filter by plant UUID' },
                   from: { type: 'string', format: 'date', description: 'Start date (YYYY-MM-DD)' },
                   to: { type: 'string', format: 'date', description: 'End date (YYYY-MM-DD)' },
@@ -1216,6 +1219,66 @@ for (const [key, table] of Object.entries(apexTableCatalog)) {
     },
   };
 }
+
+const { REPORT_TYPES: apexReportTypes } = require('./apex-report-routes');
+
+const apexReportFilters = [
+  { in: 'query', name: 'format', schema: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx' } },
+  ...dateRangeParams,
+  { in: 'query', name: 'region', schema: { type: 'string', enum: ['North', 'South', 'East', 'West'] } },
+  { in: 'query', name: 'business_unit', schema: { type: 'string' }, description: 'e.g. Enterprise Solutions' },
+];
+const apexReportResponses = {
+  200: { description: 'Report generated', content: { 'application/json': { schema: { $ref: '#/components/schemas/ReportGenerateResponse' } } } },
+  400: { $ref: '#/components/responses/BadRequest' },
+  401: { $ref: '#/components/responses/Unauthorized' },
+  500: { $ref: '#/components/responses/ServerError' },
+};
+
+spec.paths['/api/apex/reports/generate'] = {
+  get: {
+    tags: ['Apex Group - Reports'],
+    summary: 'Generate an Apex Group report (PPTX, PDF or CSV), or export a full table to CSV',
+    description: 'full-report covers every Apex table and ends with a row-count appendix. ' +
+      'report_type=table-export with table=<key> streams every matching row of one table to CSV and accepts that table\'s filters. ' +
+      'from/to filter historical facts; predictions and scenarios are a forward snapshot and are not date-filtered.',
+    parameters: [
+      { in: 'query', name: 'report_type', required: true, schema: { type: 'string', enum: [...Object.keys(apexReportTypes), 'table-export'] } },
+      { in: 'query', name: 'table', schema: { type: 'string', enum: Object.keys(apexTableCatalog) }, description: 'Table key for table-export' },
+      ...apexReportFilters,
+    ],
+    responses: apexReportResponses,
+  },
+};
+
+const apexQueryBody = {
+  type: 'object',
+  required: ['query'],
+  properties: {
+    query: { type: 'string', description: 'Natural language request, e.g. "report on customer churn and receivables"' },
+    format: { type: 'string', enum: ['pptx', 'pdf', 'csv'], default: 'pptx' },
+    from: { type: 'string', format: 'date' },
+    to: { type: 'string', format: 'date' },
+    region: { type: 'string' },
+    business_unit: { type: 'string' },
+  },
+};
+
+spec.paths['/api/apex/reports/generate-query'] = {
+  get: {
+    tags: ['Apex Group - Reports'],
+    summary: 'Generate an Apex Group report from a natural language query',
+    description: 'Matches topics (revenue, forecast, budget, cash, ledger, sales, customers, receivables, payables, workforce, attrition, controls, audit, recommendations, scenarios and more) to report sections. "full"/"everything" builds the full report.',
+    parameters: [{ in: 'query', name: 'query', required: true, schema: { type: 'string' } }, ...apexReportFilters],
+    responses: apexReportResponses,
+  },
+  post: {
+    tags: ['Apex Group - Reports'],
+    summary: 'Generate an Apex Group report from a natural language query (POST)',
+    requestBody: { required: true, content: { 'application/json': { schema: apexQueryBody } } },
+    responses: apexReportResponses,
+  },
+};
 
 const swaggerSpec = swaggerJSDoc({
   definition: spec,

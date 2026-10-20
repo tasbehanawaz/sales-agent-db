@@ -4,18 +4,10 @@
  */
 
 require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
 const { query } = require('./db');
 const { intParam, strParam, dateParam, uuidParams, addFilter, whereSql } = require('./queryParams');
 
 const MFG_DB = process.env.DB_NAME_MFG || 'manufacturing_agent_demo';
-const reportsDir = path.join(__dirname, 'reports', 'generated');
-
-// Create reports directory if it doesn't exist
-if (!fs.existsSync(reportsDir)) {
-  fs.mkdirSync(reportsDir, { recursive: true });
-}
 
 // ============= DIMENSION ENDPOINTS =============
 
@@ -555,13 +547,17 @@ async function getQualityTrends(req, res) {
 
 // ============= REPORT GENERATION =============
 
-const ReportGenerator = require('./reports/reportGenerator');
-const PDFReportGenerator = require('./reports/pdfReportGenerator');
+const { FORMATS, writeReport, downloadUrl } = require('./reports/writeReport');
+
+function reportFormat(value) {
+  const format = (strParam(value) || 'pptx').toLowerCase();
+  return FORMATS.includes(format) ? format : null;
+}
 
 async function generateReport(req, res) {
   try {
     const reportType = strParam(req.query.report_type);
-    const format = strParam(req.query.format) || 'pptx';
+    const format = reportFormat(req.query.format);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
     const ids = uuidParams(req.query, ['plant_id']);
@@ -570,6 +566,9 @@ async function generateReport(req, res) {
 
     if (!reportType) {
       return res.status(400).json({ success: false, error: 'report_type parameter required' });
+    }
+    if (!format) {
+      return res.status(400).json({ success: false, error: `format must be one of ${FORMATS.join(', ')}` });
     }
 
     let reportData = {};
@@ -595,71 +594,24 @@ async function generateReport(req, res) {
         return res.status(400).json({ success: false, error: `Unknown report type: ${reportType}` });
     }
 
-    // Generate report in requested format
-    if (format === 'pdf') {
-      return await generateReportPDF(reportType, reportData, req, res, {
-        from: fromDate,
-        to: toDate,
-        plant_id: plantId,
-      });
-    } else {
-      // Default to PPTX
-      const generator = new ReportGenerator(reportType, reportData);
-      const prs = await generator.generateReport();
-
-      // Save to persistent reports directory
-      const filename = `mfg-${reportType}_${Date.now()}.pptx`;
-      const filepath = path.join(reportsDir, filename);
-      await prs.writeFile({ fileName: filepath });
-
-      // Return download link
-      const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
-
-      res.json({
-        success: true,
-        report_type: reportType,
-        format: 'pptx',
-        filename: filename,
-        download_url: downloadUrl,
-        message: 'Manufacturing report generated successfully. Use download_url to download.'
-      });
-    }
-  } catch (err) {
-    console.error('Report generation error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-}
-
-async function generateReportPDF(reportType, reportData, req, res, filters = {}, extra = {}) {
-  try {
-    const generator = new PDFReportGenerator(reportType, reportData, filters);
-    await generator.generateReport();
-
-    const fileSlug = extra.file_slug || reportType;
-    const filename = `mfg-${fileSlug}_${Date.now()}.pdf`;
-    const filepath = path.join(reportsDir, filename);
-
-    await generator.save(fs.createWriteStream(filepath));
-
-    // Return download link
-    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
-
-    // Don't leak file_slug into the JSON response
-    const { file_slug: _fileSlug, ...publicExtra } = extra;
+    const filename = await writeReport({
+      prefix: 'mfg',
+      format,
+      reportType,
+      data: reportData,
+      filters: { from: fromDate, to: toDate, plant_id: plantId },
+    });
 
     res.json({
       success: true,
       report_type: reportType,
-      format: 'pdf',
-      filename: filename,
-      download_url: downloadUrl,
-      message: publicExtra.query
-        ? `Manufacturing report generated from query topics: ${(publicExtra.topics || []).join(', ') || 'custom'}. Use download_url to download.`
-        : 'Manufacturing report generated successfully. Use download_url to download.',
-      ...publicExtra,
+      format,
+      filename,
+      download_url: downloadUrl(req, filename),
+      message: 'Manufacturing report generated successfully. Use download_url to download.'
     });
   } catch (err) {
-    console.error('PDF generation error:', err);
+    console.error('Report generation error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 }
@@ -667,7 +619,7 @@ async function generateReportPDF(reportType, reportData, req, res, filters = {},
 async function generateReportQuery(req, res) {
   try {
     const userQuery = strParam(req.body.query) || strParam(req.query.query);
-    const format = strParam(req.body.format) || strParam(req.query.format) || 'pptx';
+    const format = reportFormat(req.body.format || req.query.format);
     const fromDate = dateParam(req.body.from) || dateParam(req.query.from);
     const toDate = dateParam(req.body.to) || dateParam(req.query.to);
     const ids = uuidParams({ ...req.query, ...req.body }, ['plant_id']);
@@ -677,31 +629,22 @@ async function generateReportQuery(req, res) {
     if (!userQuery) {
       return res.status(400).json({ success: false, error: 'query parameter required' });
     }
+    if (!format) {
+      return res.status(400).json({ success: false, error: `format must be one of ${FORMATS.join(', ')}` });
+    }
 
     // Analyze the user question → topics → fetch matching DB data → custom report
     const plan = analyzeQuery(userQuery);
     const reportData = await buildQueryDrivenReportData(plan, fromDate, toDate, plantId);
     const reportType = 'query-driven';
-    const fileSlug = buildReportFileSlug(reportData.title || plan.title, plan.topics);
-    const filters = { from: fromDate, to: toDate, plant_id: plantId, query: userQuery };
-
-    if (format === 'pdf') {
-      return await generateReportPDF(reportType, reportData, req, res, filters, {
-        query: userQuery,
-        title: reportData.title || plan.title,
-        inferred_report_type: reportType,
-        topics: plan.topics,
-        matched_template: plan.primaryTemplate,
-        file_slug: fileSlug,
-      });
-    }
-
-    const generator = new ReportGenerator(reportType, reportData, filters);
-    const prs = await generator.generateReport();
-    const filename = `mfg-${fileSlug}_${Date.now()}.pptx`;
-    const filepath = path.join(reportsDir, filename);
-    await prs.writeFile({ fileName: filepath });
-    const downloadUrl = `${req.protocol}://${req.get('host')}/reports/download/${filename}`;
+    const filename = await writeReport({
+      prefix: 'mfg',
+      format,
+      reportType,
+      data: reportData,
+      filters: { from: fromDate, to: toDate, plant_id: plantId, query: userQuery },
+      slug: buildReportFileSlug(reportData.title || plan.title, plan.topics),
+    });
 
     res.json({
       success: true,
@@ -711,9 +654,9 @@ async function generateReportQuery(req, res) {
       inferred_report_type: reportType,
       topics: plan.topics,
       matched_template: plan.primaryTemplate,
-      format: 'pptx',
+      format,
       filename,
-      download_url: downloadUrl,
+      download_url: downloadUrl(req, filename),
       message: `Report built from DB data for topics: ${plan.topics.join(', ') || 'general'}. Use download_url to download.`,
     });
   } catch (err) {
@@ -776,7 +719,7 @@ function analyzeQuery(query) {
 function buildReportTitleFromQuery(query, topics) {
   const cleaned = String(query || '')
     .replace(/^(create|generate|make|give me|show me|build)\s+(a\s+)?/i, '')
-    .replace(/\b(pdf|pptx|powerpoint|report)\b/gi, '')
+    .replace(/\b(as\s+(an?\s+)?)?(pdf|pptx|csv|powerpoint|excel|report)\b/gi, '')
     .replace(/^\s*(on|for|about)\s+/i, '')
     .replace(/^\s*the\s+/i, '')
     .replace(/\s+/g, ' ')

@@ -13,7 +13,9 @@ const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryP
 const mfgRoutes = require('./mfg-routes');
 const apexRoutes = require('./apex-routes');
 const apexTableRoutes = require('./apex-table-routes');
+const apexReportRoutes = require('./apex-report-routes');
 const SalesReportGenerator = require('./reports/salesReportGenerator');
+const { reportsDir, writeReport } = require('./reports/writeReport');
 const swaggerUi = require('swagger-ui-express');
 const { swaggerSpec } = require('./swagger');
 
@@ -618,25 +620,27 @@ for (const tableKey of Object.keys(apexTableRoutes.TABLES)) {
   app.get('/api/apex/tables/' + tableKey, apexTableRoutes.handler(tableKey));
 }
 
+app.get('/api/apex/reports/generate', apexReportRoutes.generateReport);
+app.post('/api/apex/reports/generate-query', apexReportRoutes.generateReportQuery);
+app.get('/api/apex/reports/generate-query', apexReportRoutes.generateReportQuery);
+
 // Report generation
 app.get('/api/mfg/reports/generate', mfgRoutes.generateReport);
 // Query-based report generation (supports format parameter: pptx or pdf)
 app.post('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
 app.get('/api/mfg/reports/generate-query', mfgRoutes.generateReportQuery);
 
-// Ensure reports directory exists
-const reportsDir = path.join(__dirname, 'reports', 'generated');
-if (!fs.existsSync(reportsDir)) {
-  fs.mkdirSync(reportsDir, { recursive: true });
-}
-
 // Sales reports (no DB required - demo only)
 app.get('/api/sales/reports/generate', async (req, res) => {
   try {
     const reportType = strParam(req.query.report_type);
+    const format = (strParam(req.query.format) || 'pptx').toLowerCase();
 
     if (!reportType || !['sales-overview', 'doctor-distribution', 'pharmacy-network'].includes(reportType)) {
       return res.status(400).json({ success: false, error: 'Invalid report_type (sales-overview|doctor-distribution|pharmacy-network)' });
+    }
+    if (!['pptx', 'csv'].includes(format)) {
+      return res.status(400).json({ success: false, error: 'format must be pptx or csv' });
     }
 
     // Demo data (for testing without manufacturing DB)
@@ -652,18 +656,19 @@ app.get('/api/sales/reports/generate', async (req, res) => {
       }
     };
 
-    const generator = new SalesReportGenerator(reportType, demoData[reportType] || {});
-    const prs = await generator.generateReport();
-
-    const filename = `${reportType}_${Date.now()}.pptx`;
-    const filepath = path.join(reportsDir, filename);
-    await prs.writeFile({ fileName: filepath });
+    const filename = await writeReport({
+      format,
+      reportType,
+      data: demoData[reportType] || {},
+      Pptx: SalesReportGenerator,
+    });
 
     const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/reports/download/${filename}`;
 
     res.json({
       success: true,
       report_type: reportType,
+      format,
       filename: filename,
       download_url: downloadUrl,
       message: 'Report generated successfully. Use download_url to download.'
@@ -680,7 +685,7 @@ app.get('/api/sales/reports/download/:filename', (req, res) => {
     const filename = req.params.filename;
 
     // Security: validate filename format to prevent directory traversal
-    if (!/^[a-z-]+_\d+\.pptx$/.test(filename)) {
+    if (!/^[a-z-]+_\d+\.(pptx|csv)$/.test(filename)) {
       return res.status(400).json({ success: false, error: 'Invalid filename format' });
     }
 
@@ -698,13 +703,13 @@ app.get('/api/sales/reports/download/:filename', (req, res) => {
   }
 });
 
-// Public download endpoint for manufacturing reports (no API key required)
+// Public download endpoint for manufacturing and Apex reports (no API key required)
 app.get('/reports/download/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
 
     // Security: validate filename format to prevent directory traversal
-    if (!/^mfg-[a-z-]+_\d+\.(pptx|pdf)$/.test(filename)) {
+    if (!/^(mfg|apex)-[a-z0-9-]+_\d+\.(pptx|pdf|csv)$/.test(filename)) {
       return res.status(400).json({ success: false, error: 'Invalid filename format' });
     }
 
