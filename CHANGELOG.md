@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- MCP server at `POST /mcp`: every sales, manufacturing and Apex `GET` endpoint is a tool, generated from the
+  OpenAPI spec, plus `apex_table` for the Apex tables. Uses the same `x-api-key`. See `api/README.md`.
+- OpenAPI operations now have `operationId`s, matching the MCP tool names.
 - Sales reports in PDF, built from the sales database: sales by region, trend, product, therapy area and representative;
   pharmacies by channel and top accounts; doctors by specialty and region; call completion. New `full-report` type and
   `from`, `to` and `region` filters on `/api/sales/reports/generate`.

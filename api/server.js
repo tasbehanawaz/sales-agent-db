@@ -19,6 +19,7 @@ const salesReportRoutes = require('./sales-report-routes');
 const { reportsDir } = require('./reports/writeReport');
 const swaggerUi = require('swagger-ui-express');
 const { swaggerSpec } = require('./swagger');
+const { mcpHandler } = require('./mcp');
 
 const app = express();
 // Honor X-Forwarded-Proto/Host from the nginx reverse proxy so req.protocol
@@ -74,6 +75,12 @@ if (SWAGGER_ENABLED) {
 
 app.use('/api', validateApiKey);
 app.use('/api', cacheMiddleware);
+
+// MCP endpoint for agent platforms; same API key as /api. Stateless, so only POST is served.
+app.post('/mcp', validateApiKey, mcpHandler({ port: PORT, apiKey: API_KEY }));
+app.all('/mcp', (req, res) => {
+  res.status(405).set('Allow', 'POST').json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
+});
 
 app.get('/api/doctors', async (req, res) => {
   try {

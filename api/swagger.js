@@ -1283,6 +1283,21 @@ spec.paths['/api/apex/reports/generate-query'] = {
   },
 };
 
+// operationId doubles as the MCP tool name (see mcp.js), so it carries the domain:
+// '/api/mfg/oee-dashboard' -> 'mfg_oee_dashboard', '/api/doctors/{id}' -> 'sales_doctors_by_id'.
+const DOMAINS = ['mfg', 'apex', 'sales'];
+for (const [route, ops] of Object.entries(spec.paths)) {
+  const segments = route
+    .replace(/^\/(api\/)?/, '')
+    .split('/')
+    .map((s) => s.replace(/^\{(.+)\}$/, 'by_$1').replace(/-/g, '_'));
+  if (route.startsWith('/api/') && !DOMAINS.includes(segments[0])) segments.unshift('sales');
+  const base = segments.join('_');
+  for (const [method, op] of Object.entries(ops)) {
+    op.operationId = method === 'get' || !ops.get ? base : `${base}_${method}`;
+  }
+}
+
 const swaggerSpec = swaggerJSDoc({
   definition: spec,
   apis: [],

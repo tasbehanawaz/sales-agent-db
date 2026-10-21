@@ -51,6 +51,34 @@ npm run dev        # Development with nodemon
 ### Stats
 - `GET /api/stats` — Total record counts
 
+## MCP Server
+
+`POST /mcp` serves the same endpoints as MCP tools (Streamable HTTP, stateless, plain JSON responses).
+Send the API key as `x-api-key`.
+
+- One tool per `GET /api/*` endpoint, named by its OpenAPI `operationId`: `/api/mfg/oee-dashboard` is
+  `mfg_oee_dashboard`, `/api/doctors/{id}` is `sales_doctors_by_id`. Sales endpoints get a `sales_` prefix.
+- The per-table Apex endpoints are one tool, `apex_table`, with a `table` argument. `apex_tables` lists them.
+- Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
+- Tool inputs come from `swagger.js`, so a new or changed endpoint documented there shows up as a tool.
+
+Connect a client such as Claude Code:
+
+```bash
+claude mcp add --transport http sales-agent https://<host>/mcp --header "x-api-key: <API_KEY>"
+```
+
+A platform without MCP support can call a tool with one HTTP POST:
+
+```bash
+curl -s https://<host>/mcp \
+  -H "x-api-key: $API_KEY" -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mfg_oee_dashboard","arguments":{"from":"2025-01-01","to":"2025-03-31"}}}'
+```
+
+The endpoint's JSON is in `result.content[0].text`. `result.isError` is true when the endpoint returned an error.
+
 ## Postman Collection
 
 **Import**: `Sales-Agent-API.postman_collection.json` into Postman
