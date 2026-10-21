@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { TOOLS, requestPath } = require('./mcp');
+const express = require('express');
+const { TOOLS, requestPath, mcpHandler } = require('./mcp');
 
 test('every tool has a unique, client-safe name', () => {
   assert.ok(TOOLS.size > 50);
@@ -31,4 +32,22 @@ test('requestPath fills path params and encodes the query', () => {
     requestPath('/api/apex/tables/{table}', { table: 'action-catalog', limit: 2, region: 'North East' }),
     '/api/apex/tables/action-catalog?limit=2&region=North+East'
   );
+});
+
+test('plain JSON clients get a JSON reply whatever Accept they send', async () => {
+  const app = express();
+  app.use(express.json());
+  app.post('/mcp', mcpHandler({ port: 0, apiKey: 'unused' }));
+  const server = app.listen(0);
+  const url = `http://127.0.0.1:${server.address().port}/mcp`;
+  try {
+    for (const accept of ['application/json', '*/*', null]) {
+      const headers = { 'content-type': 'application/json', ...(accept && { accept }) };
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+      assert.equal(res.status, 200, `accept=${accept}`);
+      assert.equal((await res.json()).result.tools.length, TOOLS.size);
+    }
+  } finally {
+    server.close();
+  }
 });
