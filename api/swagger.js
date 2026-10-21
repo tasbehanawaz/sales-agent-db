@@ -68,6 +68,7 @@ const spec = {
     { name: 'Manufacturing - KPIs', description: 'OEE, downtime analysis, quality trends' },
     { name: 'Manufacturing - Reports', description: 'PPTX/PDF report generation and downloads' },
     { name: 'Apex Group', description: 'Apex Group scorecards, predictions, and one list endpoint per database table' },
+    { name: 'MCP', description: 'The endpoints above as Model Context Protocol tools' },
   ],
   components: {
     securitySchemes: {
@@ -1280,6 +1281,50 @@ spec.paths['/api/apex/reports/generate-query'] = {
     summary: 'Generate an Apex Group report from a natural language query (POST)',
     requestBody: { required: true, content: { 'application/json': { schema: apexQueryBody } } },
     responses: apexReportResponses,
+  },
+};
+
+spec.paths['/mcp'] = {
+  post: {
+    tags: ['MCP'],
+    summary: 'MCP server (Streamable HTTP, stateless, JSON responses)',
+    description:
+      'JSON-RPC 2.0. Every `GET /api` endpoint is a tool named by its operationId, plus `apex_table` for the Apex tables. ' +
+      'A tool result carries the endpoint\'s JSON in `result.content[0].text`. ' +
+      'Send `Accept: application/json, text/event-stream`. Only POST is served; GET and DELETE return 405.',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['jsonrpc', 'method'],
+            properties: {
+              jsonrpc: { type: 'string', enum: ['2.0'] },
+              id: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
+              method: { type: 'string', example: 'tools/call', description: 'initialize, tools/list or tools/call' },
+              params: { type: 'object', additionalProperties: true },
+            },
+          },
+          examples: {
+            list: { summary: 'List tools', value: { jsonrpc: '2.0', id: 1, method: 'tools/list' } },
+            call: {
+              summary: 'Call a tool',
+              value: {
+                jsonrpc: '2.0',
+                id: 2,
+                method: 'tools/call',
+                params: { name: 'mfg_oee_dashboard', arguments: { from: '2025-01-01', to: '2025-03-31' } },
+              },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      200: { description: 'JSON-RPC response', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } },
+      401: { $ref: '#/components/responses/Unauthorized' },
+    },
   },
 };
 
