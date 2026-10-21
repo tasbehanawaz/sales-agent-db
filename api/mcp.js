@@ -133,6 +133,17 @@ function createServer(ctx) {
   return server;
 }
 
+// Responses are always plain JSON (enableJsonResponse), never a stream, so the SDK's rule that clients
+// must also accept text/event-stream only rejects plain HTTP callers such as Swagger UI and Vertx.
+// The SDK reads rawHeaders, so both views of the header are rewritten.
+const MCP_ACCEPT = 'application/json, text/event-stream';
+function acceptJsonAndStream(req) {
+  req.headers.accept = MCP_ACCEPT;
+  const i = req.rawHeaders.findIndex((h, n) => n % 2 === 0 && h.toLowerCase() === 'accept');
+  if (i >= 0) req.rawHeaders[i + 1] = MCP_ACCEPT;
+  else req.rawHeaders.push('Accept', MCP_ACCEPT);
+}
+
 // Stateless: a fresh server and transport per request, so any instance can answer any call.
 function mcpHandler({ port, apiKey }) {
   return async (req, res) => {
@@ -146,6 +157,7 @@ function mcpHandler({ port, apiKey }) {
     });
     try {
       await server.connect(transport);
+      acceptJsonAndStream(req);
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
       console.error('MCP error:', err);
