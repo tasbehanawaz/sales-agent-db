@@ -135,7 +135,7 @@ function createServer(ctx) {
 
 // Responses are always plain JSON (enableJsonResponse), never a stream, so the SDK's rule that clients
 // must also accept text/event-stream only rejects plain HTTP callers such as Swagger UI and Vertx.
-// The SDK reads rawHeaders, so both views of the header are rewritten.
+// The SDK reads req.headers, or rawHeaders as a fallback, so both are rewritten.
 const MCP_ACCEPT = 'application/json, text/event-stream';
 function acceptJsonAndStream(req) {
   req.headers.accept = MCP_ACCEPT;

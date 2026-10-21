@@ -24,7 +24,7 @@
 - Report file names get six random digits after the timestamp, so simultaneous requests get separate files.
 
 ### Fixed
-- `POST /mcp` no longer answers 406 when the client sends `Accept: application/json` only (Swagger UI, Vertx HTTP Call).
+- `POST /mcp` no longer answers 406 when `Accept` lacks `text/event-stream` (Swagger UI, Vertx HTTP Call).
 
 ## 2026-10-20 (PR #1)
 
