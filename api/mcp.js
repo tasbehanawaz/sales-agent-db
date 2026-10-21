@@ -75,7 +75,7 @@ function requestPath(route, args) {
   const query = new URLSearchParams();
   const path = route.replace(/\{(\w+)\}/g, (_, key) => encodeURIComponent(args[key]));
   for (const [key, value] of Object.entries(args)) {
-    if (value == null || route.includes(`{${key}}`)) continue;
+    if (route.includes(`{${key}}`)) continue;
     query.set(key, String(value));
   }
   const qs = query.toString();
@@ -120,7 +120,8 @@ function createServer(ctx) {
     if (!tool) {
       return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
     }
-    const args = request.params.arguments || {};
+    // Workflows send null for empty fields; drop them before coercion turns null into "" or 0.
+    const args = Object.fromEntries(Object.entries(request.params.arguments || {}).filter(([, v]) => v != null));
     if (!tool.validate(args)) {
       const problems = tool.validate.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
       return { isError: true, content: [{ type: 'text', text: `Invalid arguments for ${tool.definition.name}: ${problems}` }] };

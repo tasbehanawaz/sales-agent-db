@@ -28,7 +28,7 @@ test('arguments are checked against the endpoint schema', () => {
 test('requestPath fills path params and encodes the query', () => {
   assert.equal(requestPath('/api/doctors/{id}', { id: 'a/b' }), '/api/doctors/a%2Fb');
   assert.equal(
-    requestPath('/api/apex/tables/{table}', { table: 'action-catalog', limit: 2, region: 'North East', to: null }),
+    requestPath('/api/apex/tables/{table}', { table: 'action-catalog', limit: 2, region: 'North East' }),
     '/api/apex/tables/action-catalog?limit=2&region=North+East'
   );
 });
