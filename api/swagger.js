@@ -1306,7 +1306,7 @@ spec.paths['/mcp'] = {
     description:
       'JSON-RPC 2.0. Every `GET /api` endpoint is a tool named by its operationId, plus `apex_table` for the Apex tables. ' +
       'A tool result carries the endpoint\'s JSON in `result.content[0].text`. ' +
-      'Send `Accept: application/json, text/event-stream`. Only POST is served; GET and DELETE return 405.',
+      'Any Accept header works; responses are always JSON. Only POST is served; GET and DELETE return 405.',
     requestBody: {
       required: true,
       content: {
