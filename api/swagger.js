@@ -521,6 +521,10 @@ const spec = {
       get: {
         tags: ['Manufacturing - Dimensions'],
         summary: 'List plants',
+        parameters: [
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 } },
+          { in: 'query', name: 'region', schema: { type: 'string' } },
+        ],
         responses: {
           200: {
             description: 'Success',
@@ -582,6 +586,10 @@ const spec = {
       get: {
         tags: ['Manufacturing - Dimensions'],
         summary: 'List manufacturing products',
+        parameters: [
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 } },
+          { in: 'query', name: 'category', schema: { type: 'string' } },
+        ],
         responses: {
           200: {
             description: 'Success',
@@ -651,6 +659,8 @@ const spec = {
         summary: 'OEE dashboard (availability/performance/quality)',
         parameters: [
           { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'shift', schema: { type: 'string' } },
           ...dateRangeParams,
         ],
         responses: {
@@ -793,6 +803,9 @@ const spec = {
         summary: 'Top downtime categories and modes',
         parameters: [
           { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'category', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
           ...dateRangeParams,
         ],
         responses: {
@@ -817,6 +830,8 @@ const spec = {
         parameters: [
           { in: 'query', name: 'plant_id', schema: { type: 'string', format: 'uuid' } },
           { in: 'query', name: 'product_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'line_id', schema: { type: 'string', format: 'uuid' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', minimum: 1, maximum: 1000, default: 200 } },
           ...dateRangeParams,
         ],
         responses: {

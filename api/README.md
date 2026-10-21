@@ -77,7 +77,10 @@ curl -s https://<host>/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mfg_oee_dashboard","arguments":{"from":"2025-01-01","to":"2025-03-31"}}}'
 ```
 
-The endpoint's JSON is in `result.content[0].text`. `result.isError` is true when the endpoint returned an error.
+The endpoint's JSON is in `result.content[0].text`. `result.isError` is true when the endpoint returned an error
+or the arguments did not match the tool's schema (unknown keys, wrong types, missing path parameters). Strings such as
+`"5"` are accepted for integer arguments. `Accept` must list both types, otherwise the server answers 406.
+`GET` and `DELETE` on `/mcp` return 405.
 
 ## Postman Collection
 
