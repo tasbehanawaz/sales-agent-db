@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- MCP `run_many` tool: up to 10 tool calls in one request, run in parallel, results in call order. Cuts agent round trips.
 - MCP server at `POST /mcp`: every sales, manufacturing and Apex `GET` endpoint is a tool, generated from the
   OpenAPI spec, plus `apex_table` for the Apex tables. Uses the same `x-api-key`. See `api/README.md`.
 - OpenAPI operations now have `operationId`s, matching the MCP tool names.

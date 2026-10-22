@@ -68,6 +68,10 @@ Send the API key as `x-api-key`.
   or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
+- `run_many` runs up to 10 tools in parallel in one call: `{"calls":[{"tool":"apex_customer_risk","arguments":{"limit":10}},{"tool":"sales_insights"}]}`.
+  The reply is `{"results":[{"tool","isError","result"}]}` in call order, each `result` being that tool's normal reply. Each call
+  is validated on its own, so one bad call does not fail the others. An agent that needs several figures gets them in one
+  step instead of one step per tool.
 - Tool inputs come from `swagger.js`, so a new or changed endpoint documented there shows up as a tool.
 
 Connect a client such as Claude Code:
