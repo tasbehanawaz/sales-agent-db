@@ -14,7 +14,7 @@
 
 require('dotenv').config();
 const { query, getPool } = require('./db');
-const { strParam, dateParam } = require('./queryParams');
+const { strParam, dateParam, monthId, dateId, quarterId } = require('./queryParams');
 const { TABLES, APEX_DB, tableFilters } = require('./apex-table-routes');
 const { FORMATS, reportsDir, writeReport, downloadUrl } = require('./reports/writeReport');
 const { csvLine } = require('./reports/csvReportGenerator');
@@ -39,15 +39,15 @@ function buildFilters({ from, to, region, business_unit, detail }) {
   const params = {};
   if (from) {
     params.from = from;
-    params.from_month = parseInt(from.slice(0, 7).replace('-', ''), 10);
-    params.from_date_id = parseInt(from.replace(/-/g, ''), 10);
-    params.from_quarter = `${from.slice(0, 4)}Q${Math.ceil(parseInt(from.slice(5, 7), 10) / 3)}`;
+    params.from_month = monthId(from);
+    params.from_date_id = dateId(from);
+    params.from_quarter = quarterId(from);
   }
   if (to) {
     params.to = to;
-    params.to_month = parseInt(to.slice(0, 7).replace('-', ''), 10);
-    params.to_date_id = parseInt(to.replace(/-/g, ''), 10);
-    params.to_quarter = `${to.slice(0, 4)}Q${Math.ceil(parseInt(to.slice(5, 7), 10) / 3)}`;
+    params.to_month = monthId(to);
+    params.to_date_id = dateId(to);
+    params.to_quarter = quarterId(to);
   }
   if (region) params.region = region;
   if (business_unit) params.business_unit = business_unit;
@@ -1522,8 +1522,8 @@ async function exportTable(tableKey, reqQuery) {
       });
       request.on('error', reject);
       request.on('done', resolve);
-      request.query(`SELECT * FROM [${APEX_DB}].dbo.[${spec.table}] ${filters.clauses.length ? 'WHERE ' + filters.clauses.join(' AND ') : ''}
-        ORDER BY [${spec.orderBy}] ${spec.orderDir}`);
+      request.query(`SELECT t.* FROM [${APEX_DB}].dbo.[${spec.table}] t ${filters.join} ${filters.clauses.length ? 'WHERE ' + filters.clauses.join(' AND ') : ''}
+        ORDER BY t.[${spec.orderBy}] ${spec.orderDir}`);
     });
     await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
   } catch (err) {

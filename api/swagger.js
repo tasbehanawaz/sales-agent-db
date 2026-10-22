@@ -986,7 +986,7 @@ const spec = {
       get: {
         tags: ['Apex Group'],
         summary: 'Monthly executive scorecard',
-        description: 'Revenue, EBITDA, cash, DSO, workforce, and control KPIs from serving_executive_scorecard_monthly. Optional filters: region, business_unit, scope_id, from, to, limit.',
+        description: 'Revenue, EBITDA, cash, DSO, workforce, and control KPIs from serving_executive_scorecard_monthly, one row per region, business unit and month, latest month first. from and to select months. For totals over a period, use /api/apex/tables/serving-executive-scorecard-monthly with group_by and metrics.',
         parameters: [
           { in: 'query', name: 'region', schema: { type: 'string' } },
           { in: 'query', name: 'business_unit', schema: { type: 'string' } },
@@ -1198,12 +1198,19 @@ const spec = {
 };
 
 const { TABLES: apexTableCatalog } = require('./apex-table-catalog');
+const { organisation: apexOrganisation } = require('./apex-table-routes');
+
+const apexAggregateParams = [
+  { in: 'query', name: 'group_by', schema: { type: 'string' }, description: 'Comma-separated columns to total by, e.g. business_unit,month. Also region, entity, department (from dim_organisation) and month, quarter, year (from the date column).' },
+  { in: 'query', name: 'metrics', schema: { type: 'string' }, description: 'Comma-separated totals: count, distinct:<column>, sum|avg|min|max:<numeric column>, e.g. sum:revenue,avg:late_flag. Defaults to count when group_by is set.' },
+  { in: 'query', name: 'sort', schema: { type: 'string' }, description: 'Group or metric name to sort by; prefix with - for descending, e.g. -sum_revenue.' },
+];
 
 spec.paths['/api/apex/tables'] = {
   get: {
     tags: ['Apex Group'],
     summary: 'List every Apex table endpoint',
-    description: 'Returns the path, row count, date column, and filter names for each table.',
+    description: 'Returns the path, row count, date column, filters, group_by columns and numeric measures for each table.',
     responses: {
       200: { description: 'Table index', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
       401: { $ref: '#/components/responses/Unauthorized' },
@@ -1223,11 +1230,16 @@ for (const [key, table] of Object.entries(apexTableCatalog)) {
     if (filter.kind === 'date' || filter.kind === 'date-from' || filter.kind === 'date-to') schema.format = 'date';
     parameters.push({ in: 'query', name: filter.param, schema });
   }
+  for (const name of apexOrganisation(table).names) {
+    parameters.push({ in: 'query', name, schema: { type: 'string' }, description: 'From dim_organisation' });
+  }
+  parameters.push(...apexAggregateParams);
   spec.paths['/api/apex/tables/' + key] = {
     get: {
       tags: ['Apex Group'],
       summary: table.table,
-      description: table.rows + ' rows in ' + table.table + '.' + (table.dateColumn ? ' from and to filter ' + table.dateColumn + '.' : ''),
+      description: table.rows + ' rows in ' + table.table + '.' + (table.dateColumn ? ' from and to filter ' + table.dateColumn + '.' : '') +
+        ' With group_by or metrics, returns totals computed over every matching row instead of rows.',
       parameters,
       responses: {
         200: { description: 'Table rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },

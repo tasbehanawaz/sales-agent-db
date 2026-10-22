@@ -6,6 +6,9 @@
 - MCP server at `POST /mcp`: every sales, manufacturing and Apex `GET` endpoint is a tool, generated from the
   OpenAPI spec, plus `apex_table` for the Apex tables. Uses the same `x-api-key`. See `api/README.md`.
 - OpenAPI operations now have `operationId`s, matching the MCP tool names.
+- Apex table endpoints (and the MCP `apex_table` tool) compute totals with `group_by`, `metrics` and `sort`, and filter or
+  group by `business_unit`, `region`, `entity` and `department` through `dim_organisation`. `apex_tables` lists each
+  table's `group_by` columns and numeric `measures`. The `apex_table` tool description maps business topics to tables.
 - Sales reports in PDF, built from the sales database: sales by region, trend, product, therapy area and representative;
   pharmacies by channel and top accounts; doctors by specialty and region; call completion. New `full-report` type and
   `from`, `to` and `region` filters on `/api/sales/reports/generate`.
@@ -25,6 +28,11 @@
 
 ### Fixed
 - `POST /mcp` no longer answers 406 when `Accept` lacks `text/event-stream` (Swagger UI, Vertx HTTP Call).
+- `/api/apex/executive-scorecard` `from`/`to` select months (`month_id`) and return the latest month first. Before, they
+  compared the snapshot date, which is the same for every row, so date filters returned everything or nothing.
+- Apex tables keyed by `month_id`, `date_id` or `quarter_id` (scorecards, budget, sales, cash, employees, attendance,
+  close tasks) now honour `from`/`to`; close tasks filter by close month instead of due date. Table CSV exports follow.
+- Apex table endpoints answer 400 for an unknown filter or a malformed `from`/`to` instead of ignoring it.
 
 ## 2026-10-20 (PR #1)
 

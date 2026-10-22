@@ -43,6 +43,19 @@ function uuidParams(query, fieldNames) {
   return { values };
 }
 
+// Period keys used by Apex tables: month_id (YYYYMM), date_id (YYYYMMDD), quarter_id (2026Q3).
+function monthId(date) {
+  return parseInt(date.slice(0, 7).replace('-', ''), 10);
+}
+
+function dateId(date) {
+  return parseInt(date.replace(/-/g, ''), 10);
+}
+
+function quarterId(date) {
+  return `${date.slice(0, 4)}Q${Math.ceil(parseInt(date.slice(5, 7), 10) / 3)}`;
+}
+
 function addFilter(clauses, params, name, sqlFragment, value) {
   if (value == null || value === '') return;
   params[name] = value;
@@ -53,4 +66,4 @@ function whereSql(clauses) {
   return clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 }
 
-module.exports = { intParam, strParam, dateParam, uuidParams, addFilter, whereSql };
+module.exports = { intParam, strParam, dateParam, uuidParams, monthId, dateId, quarterId, addFilter, whereSql };
