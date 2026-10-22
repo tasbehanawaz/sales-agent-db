@@ -134,26 +134,83 @@ function loopback({ port, apiKey, req, signal, path }) {
   });
 }
 
+async function callTool(name, rawArgs, ctx) {
+  const tool = TOOLS.get(name);
+  if (!tool) return { isError: true, text: `Unknown tool: ${name}` };
+  // Workflows send null for empty fields; drop them before coercion turns null into "" or 0.
+  const args = Object.fromEntries(Object.entries(rawArgs || {}).filter(([, v]) => v != null));
+  if (!tool.validate(args)) {
+    const problems = tool.validate.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
+    return { isError: true, text: `Invalid arguments for ${name}: ${problems}` };
+  }
+  const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, args) });
+  return { isError: status >= 400, text: body };
+}
+
+// One model step instead of one per tool: an agent that needs several figures asks for all of them at once,
+// and the calls run in parallel. Each call is validated and answered exactly as if it were made on its own.
+const RUN_MANY_MAX = 10;
+const RUN_MANY = {
+  name: 'run_many',
+  title: 'Run several tools at once',
+  description:
+    `Run up to ${RUN_MANY_MAX} tools from this server in one call, in parallel. Use it whenever an answer needs more than one tool. ` +
+    'Returns {"results":[{"tool","isError","result"}]} in the same order as calls; each result is that tool\'s normal reply. ' +
+    'Example: {"calls":[{"tool":"apex_table","arguments":{"table":"serving-executive-scorecard-monthly","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}},' +
+    '{"tool":"apex_customer_risk","arguments":{"limit":10}}]}',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      calls: {
+        type: 'array',
+        minItems: 1,
+        maxItems: RUN_MANY_MAX,
+        items: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: [...TOOLS.keys()] },
+            arguments: { type: 'object' },
+          },
+          required: ['tool'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['calls'],
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: false, openWorldHint: false },
+};
+const validateRunMany = ajv.compile(RUN_MANY.inputSchema);
+
 function createServer(ctx) {
   const server = new Server({ name, version }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...TOOLS.values()].map((t) => t.definition),
+    tools: [...[...TOOLS.values()].map((t) => t.definition), RUN_MANY],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const tool = TOOLS.get(request.params.name);
-    if (!tool) {
-      return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
+    const { name, arguments: args } = request.params;
+    if (name === RUN_MANY.name) {
+      if (!validateRunMany(args || {})) {
+        const problems = validateRunMany.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
+        return { isError: true, content: [{ type: 'text', text: `Invalid arguments for ${RUN_MANY.name}: ${problems}` }] };
+      }
+      const results = await Promise.all(args.calls.map(async (c) => {
+        const { isError, text } = await callTool(c.tool, c.arguments, ctx);
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch {
+          result = text;
+        }
+        return { tool: c.tool, isError, result };
+      }));
+      return { isError: results.every((r) => r.isError), content: [{ type: 'text', text: JSON.stringify({ results }) }] };
     }
-    // Workflows send null for empty fields; drop them before coercion turns null into "" or 0.
-    const args = Object.fromEntries(Object.entries(request.params.arguments || {}).filter(([, v]) => v != null));
-    if (!tool.validate(args)) {
-      const problems = tool.validate.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
-      return { isError: true, content: [{ type: 'text', text: `Invalid arguments for ${tool.definition.name}: ${problems}` }] };
-    }
-    const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, args) });
-    return { isError: status >= 400, content: [{ type: 'text', text: body }] };
+    const { isError, text } = await callTool(name, args, ctx);
+    return { isError, content: [{ type: 'text', text }] };
   });
 
   return server;
@@ -194,4 +251,4 @@ function mcpHandler({ port, apiKey }) {
   };
 }
 
-module.exports = { mcpHandler, TOOLS, requestPath };
+module.exports = { mcpHandler, TOOLS, RUN_MANY, requestPath };

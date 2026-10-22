@@ -1316,7 +1316,7 @@ spec.paths['/mcp'] = {
     tags: ['MCP'],
     summary: 'MCP server (Streamable HTTP, stateless, JSON responses)',
     description:
-      'JSON-RPC 2.0. Every `GET /api` endpoint is a tool named by its operationId, plus `apex_table` for the Apex tables. ' +
+      'JSON-RPC 2.0. Every `GET /api` endpoint is a tool named by its operationId, plus `apex_table` for the Apex tables and `run_many` to run up to 10 tools in parallel in one call. ' +
       'A tool result carries the endpoint\'s JSON in `result.content[0].text`. ' +
       'Any Accept header works; responses are always JSON. Only POST is served; GET and DELETE return 405.',
     requestBody: {
