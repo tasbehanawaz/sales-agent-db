@@ -13,6 +13,30 @@ const { TABLES: APEX_TABLES } = require('./apex-table-routes');
 const { name, version } = require('./package.json');
 
 const APEX_TABLE_PREFIX = '/api/apex/tables/';
+
+// Agents pick tables from this text, so it maps business topics to the table that holds them.
+const APEX_TABLE_GUIDE = [
+  'Read or total any Apex Group table. Without group_by or metrics it returns rows (capped by limit).',
+  'With group_by and/or metrics it returns totals computed over every matching row: use that for any sum, average, rate, ranking or comparison instead of adding rows yourself.',
+  'Filters: from/to (YYYY-MM-DD) on the table\'s period column; the column filters listed by apex_tables; and business_unit, region, entity, department on tables linked to an org unit or entity.',
+  'Metrics: count, distinct:<column>, sum|avg|min|max:<numeric column>. avg of a 0/1 flag is a rate (avg:late_flag = share of late tasks).',
+  'Point-in-time values (headcount, balances, outstanding amounts) are per month: filter or group by month instead of summing across months.',
+  'Example: {"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda,sum:operating_cash_flow","from":"2025-10-01","to":"2026-09-30"}.',
+  'Where to look:',
+  'KPIs by region, business unit and month: serving-executive-scorecard-monthly. Control risk by quarter: serving-control-risk-scorecard-quarterly.',
+  'Revenue, discount and margin by customer, offering or channel: fact-sales-transaction. Bookings, pipeline, renewals: fact-contract-pipeline.',
+  'Customer health, disputes, SLA, credit notes: fact-customer-monthly, fact-customer-service. Discount overrides: fact-discount-approval.',
+  'Budget vs actual vs forecast by cost centre and account: fact-budget-forecast. Ledger: fact-gl-transaction. Cash: fact-cash-position.',
+  'Receivables, DSO, disputes, billing errors: fact-ar-invoice-payment. Payables: fact-ap-invoice-payment.',
+  'Month-end close tasks and reconciliations: fact-reconciliation-close. Manual journals: fact-manual-journal.',
+  'Vendor bank and master-data changes: fact-vendor-master-change. Access and segregation-of-duties events: fact-access-sod-event.',
+  'Control tests and exceptions: fact-control-test, fact-control-exception. Audit findings and remediation: fact-audit-finding, fact-issue-remediation.',
+  'Headcount, pay, workload, critical roles: fact-employee-monthly. Overtime and absence: fact-time-attendance. Hires and exits: fact-hire-exit.',
+  'Vacancies: fact-vacancy-recruitment. Engagement and manager scores: fact-engagement-performance. Training, critical skills, pay changes: fact-learning-compensation.',
+  'Names and attributes: dim-organisation, dim-customer, dim-product-service, dim-account, dim-cost-center, dim-vendor, dim-risk-control, dim-employee.',
+  'KPI definitions: meta-kpi-definition. Prediction models and runs: meta-model-registry. Monthly driver indices: meta-latent-drivers-monthly.',
+  'Call apex_tables for each table\'s filters, group_by columns and numeric measures.',
+].join(' ');
 const LOOPBACK_TIMEOUT_MS = 120000;
 
 // Workflow variables often arrive as strings, so "5" is accepted where an integer is declared.
@@ -50,9 +74,7 @@ function buildTools() {
   add('apex_table', `${APEX_TABLE_PREFIX}{table}`, {
     name: 'apex_table',
     title: 'Read an Apex table',
-    description:
-      'Rows from one Apex Group table. Call apex_tables first to see each table\'s row count, date column and filter names; ' +
-      'pass those filters as extra arguments.',
+    description: APEX_TABLE_GUIDE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -60,6 +82,9 @@ function buildTools() {
         limit: { type: 'integer', minimum: 1 },
         from: { type: 'string', format: 'date', description: 'Start date (YYYY-MM-DD), for tables with a date column' },
         to: { type: 'string', format: 'date', description: 'End date (YYYY-MM-DD), for tables with a date column' },
+        group_by: { type: 'string', description: 'Comma-separated columns to total by, e.g. business_unit,month' },
+        metrics: { type: 'string', description: 'Comma-separated totals: count, distinct:<column>, sum|avg|min|max:<numeric column>' },
+        sort: { type: 'string', description: 'Group or metric name to sort by, - prefix for descending, e.g. -sum_revenue' },
       },
       required: ['table'],
       additionalProperties: { type: ['string', 'integer', 'number'] },

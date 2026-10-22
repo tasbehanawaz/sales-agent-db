@@ -59,6 +59,12 @@ Send the API key as `x-api-key`.
 - One tool per `GET /api/*` endpoint, named by its OpenAPI `operationId`: `/api/mfg/oee-dashboard` is
   `mfg_oee_dashboard`, `/api/doctors/{id}` is `sales_doctors_by_id`. Sales endpoints get a `sales_` prefix.
 - The per-table Apex endpoints are one tool, `apex_table`, with a `table` argument. `apex_tables` lists them.
+- `apex_table` also returns totals: `group_by` (any column, plus `business_unit`, `region`, `entity`, `department`
+  through `dim_organisation`, and `month`, `quarter`, `year`) and `metrics` (`count`, `distinct:<column>`,
+  `sum|avg|min|max:<numeric column>`) are computed in SQL over every matching row, sorted with `sort` (`-` for
+  descending). `apex_tables` lists each table's filters, `group_by` columns and numeric `measures`. Unknown filters
+  are rejected instead of ignored. For example, revenue and EBITDA by business unit for a year:
+  `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
 - Tool inputs come from `swagger.js`, so a new or changed endpoint documented there shows up as a tool.
 

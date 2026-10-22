@@ -7,7 +7,7 @@
 
 require('dotenv').config();
 const { query } = require('./db');
-const { intParam, strParam, dateParam, addFilter, whereSql } = require('./queryParams');
+const { intParam, strParam, dateParam, monthId, addFilter, whereSql } = require('./queryParams');
 
 const APEX_DB = process.env.DB_NAME_APEX || 'apex_agent_demo';
 
@@ -37,13 +37,13 @@ async function getExecutiveScorecard(req, res) {
     addFilter(clauses, params, 'scope_id', 'scope_id = @scope_id', strParam(req.query.scope_id));
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
-    if (fromDate) addFilter(clauses, params, 'from_date', 'as_of_date >= @from_date', fromDate);
-    if (toDate) addFilter(clauses, params, 'to_date', 'as_of_date <= @to_date', toDate);
+    if (fromDate) addFilter(clauses, params, 'from_month', 'month_id >= @from_month', monthId(fromDate));
+    if (toDate) addFilter(clauses, params, 'to_month', 'month_id <= @to_month', monthId(toDate));
 
     const data = await query(
       `SELECT TOP (@limit) * FROM ${table('serving_executive_scorecard_monthly')}
        ${whereSql(clauses)}
-       ORDER BY as_of_date DESC, region, business_unit`,
+       ORDER BY month_id DESC, region, business_unit`,
       params
     );
     res.json({ success: true, count: data.length, data });
