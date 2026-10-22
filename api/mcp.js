@@ -150,12 +150,22 @@ async function callTool(name, rawArgs, ctx) {
 // One model step instead of one per tool: an agent that needs several figures asks for all of them at once,
 // and the calls run in parallel. Each call is validated and answered exactly as if it were made on its own.
 const RUN_MANY_MAX = 10;
+// At most this many at once, so one batch leaves database connections (pool max 10) for other callers.
+const RUN_MANY_PARALLEL = 5;
+
+async function inBatches(items, size, fn) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
+  return out;
+}
 const RUN_MANY = {
   name: 'run_many',
   title: 'Run several tools at once',
   description:
     `Run up to ${RUN_MANY_MAX} tools from this server in one call, in parallel. Use it whenever an answer needs more than one tool. ` +
     'Returns {"results":[{"tool","isError","result"}]} in the same order as calls; each result is that tool\'s normal reply. ' +
+    'Check isError on each result: one failed call does not fail the others, and the reply is an error only if every call failed. ' +
+    'Keep each call small (totals, limit) because all results come back together. ' +
     'Example: {"calls":[{"tool":"apex_table","arguments":{"table":"serving-executive-scorecard-monthly","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}},' +
     '{"tool":"apex_customer_risk","arguments":{"limit":10}}]}',
   inputSchema: {
@@ -169,7 +179,7 @@ const RUN_MANY = {
           type: 'object',
           properties: {
             tool: { type: 'string', enum: [...TOOLS.keys()] },
-            arguments: { type: 'object' },
+            arguments: { type: ['object', 'null'] },
           },
           required: ['tool'],
           additionalProperties: false,
@@ -197,8 +207,9 @@ function createServer(ctx) {
         const problems = validateRunMany.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
         return { isError: true, content: [{ type: 'text', text: `Invalid arguments for ${RUN_MANY.name}: ${problems}` }] };
       }
-      const results = await Promise.all(args.calls.map(async (c) => {
-        const { isError, text } = await callTool(c.tool, c.arguments, ctx);
+      const results = await inBatches(args.calls, RUN_MANY_PARALLEL, async (c) => {
+        // A timeout or dropped connection fails only its own call, never the whole batch.
+        const { isError, text } = await callTool(c.tool, c.arguments, ctx).catch((err) => ({ isError: true, text: err.message }));
         let result;
         try {
           result = JSON.parse(text);
@@ -206,7 +217,7 @@ function createServer(ctx) {
           result = text;
         }
         return { tool: c.tool, isError, result };
-      }));
+      });
       return { isError: results.every((r) => r.isError), content: [{ type: 'text', text: JSON.stringify({ results }) }] };
     }
     const { isError, text } = await callTool(name, args, ctx);
