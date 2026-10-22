@@ -20,6 +20,7 @@ const APEX_TABLE_GUIDE = [
   'With group_by and/or metrics it returns totals computed over every matching row: use that for any sum, average, rate, ranking or comparison instead of adding rows yourself.',
   'Filters: from/to (YYYY-MM-DD) on the table\'s period column; the column filters listed by apex_tables; and business_unit, region, entity, department on tables linked to an org unit or entity.',
   'Metrics: count, distinct:<column>, sum|avg|min|max:<numeric column>. avg of a 0/1 flag is a rate (avg:late_flag = share of late tasks).',
+  'If the reply has truncated: true, only the first groups (by sort) were returned: narrow the filters or sort by what matters.',
   'Point-in-time values (headcount, balances, outstanding amounts) are per month: filter or group by month instead of summing across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda,sum:operating_cash_flow","from":"2025-10-01","to":"2026-09-30"}.',
   'Where to look:',

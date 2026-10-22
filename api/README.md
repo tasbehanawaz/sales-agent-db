@@ -62,8 +62,10 @@ Send the API key as `x-api-key`.
 - `apex_table` also returns totals: `group_by` (any column, plus `business_unit`, `region`, `entity`, `department`
   through `dim_organisation`, and `month`, `quarter`, `year`) and `metrics` (`count`, `distinct:<column>`,
   `sum|avg|min|max:<numeric column>`) are computed in SQL over every matching row, sorted with `sort` (`-` for
-  descending). `apex_tables` lists each table's filters, `group_by` columns and numeric `measures`. Unknown filters
-  are rejected instead of ignored. For example, revenue and EBITDA by business unit for a year:
+  descending). Replies carry `rows_matched`, `groups_total` and `truncated` (more groups than `limit`, default 1000).
+  `apex_tables` lists each table's filters, `group_by` columns and numeric `measures`. Unknown filters are rejected
+  instead of ignored. On tables keyed by `month_id`, `date_id` or `quarter_id`, `from`/`to` cover whole months, days
+  or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
 - Tool inputs come from `swagger.js`, so a new or changed endpoint documented there shows up as a tool.
