@@ -43,24 +43,7 @@ const TABLES = {
         "column": "active_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "action_id": "text",
-      "function": "text",
-      "action_name": "text",
-      "trigger_rule": "text",
-      "scope_eligibility": "text",
-      "accountable_owner_role": "text",
-      "estimated_cost_usd": "number",
-      "time_to_impact_days": "number",
-      "implementation_effort": "text",
-      "financial_effect_formula": "text",
-      "expected_benefit_usd_m": "number",
-      "risk_reduction_points": "number",
-      "dependencies": "text",
-      "exclusions": "text",
-      "active_flag": "number"
-    }
+    ]
   },
   "action-recommendation": {
     "table": "action_recommendation",
@@ -96,28 +79,7 @@ const TABLES = {
         "column": "model_or_rule_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "recommendation_id": "text",
-      "action_id": "text",
-      "as_of_date": "date",
-      "scope_id": "text",
-      "trigger_evidence": "text",
-      "supporting_diagnostic": "text",
-      "supporting_prediction": "text",
-      "gross_financial_benefit_usd": "number",
-      "implementation_cost_usd": "number",
-      "net_financial_benefit_usd": "number",
-      "cash_benefit_usd": "number",
-      "risk_reduction_points": "number",
-      "workforce_effect_fte": "number",
-      "confidence_score": "number",
-      "priority_score": "number",
-      "accountable_owner_role": "text",
-      "time_to_impact_days": "number",
-      "rationale": "text",
-      "model_or_rule_id": "text"
-    }
+    ]
   },
   "decision-constraint": {
     "table": "decision_constraint",
@@ -158,16 +120,7 @@ const TABLES = {
         "column": "mandatory_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "constraint_id": "text",
-      "scenario_id": "text",
-      "constraint_name": "text",
-      "operator": "text",
-      "constraint_value": "number",
-      "unit": "text",
-      "mandatory_flag": "number"
-    }
+    ]
   },
   "dim-account": {
     "table": "dim_account",
@@ -218,17 +171,7 @@ const TABLES = {
         "column": "active_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "account_id": "text",
-      "account_code": "text",
-      "account_name": "text",
-      "account_category": "text",
-      "financial_statement": "text",
-      "normal_balance": "text",
-      "materiality_group": "text",
-      "active_flag": "number"
-    }
+    ]
   },
   "dim-cost-center": {
     "table": "dim_cost_center",
@@ -269,15 +212,7 @@ const TABLES = {
         "column": "cost_center_type",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "cost_center_id": "text",
-      "org_unit_id": "text",
-      "cost_center_name": "text",
-      "owner_role_id": "text",
-      "active_flag": "number",
-      "cost_center_type": "text"
-    }
+    ]
   },
   "dim-customer": {
     "table": "dim_customer",
@@ -338,21 +273,7 @@ const TABLES = {
         "column": "south_concentration_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "customer_id": "text",
-      "customer_name": "text",
-      "region": "text",
-      "segment": "text",
-      "industry": "text",
-      "credit_rating": "text",
-      "payment_terms_days": "number",
-      "strategic_flag": "number",
-      "relationship_owner_role_id": "text",
-      "active_from": "date",
-      "active_flag": "number",
-      "south_concentration_flag": "number"
-    }
+    ]
   },
   "dim-date": {
     "table": "dim_date",
@@ -418,25 +339,7 @@ const TABLES = {
         "column": "actual_forecast_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "date_id": "number",
-      "date": "date",
-      "day_name": "text",
-      "week_of_year": "number",
-      "month_num": "number",
-      "month_name": "text",
-      "month_id": "number",
-      "quarter": "text",
-      "financial_year": "number",
-      "working_day": "number",
-      "holiday_flag": "number",
-      "season": "text",
-      "peak_period_flag": "number",
-      "actual_forecast_flag": "text",
-      "as_of_date": "date",
-      "business_days_in_month": "number"
-    }
+    ]
   },
   "dim-employee": {
     "table": "dim_employee",
@@ -507,22 +410,7 @@ const TABLES = {
         "column": "protected_attributes_excluded_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "employee_id": "text",
-      "employee_alias": "text",
-      "org_unit_id": "text",
-      "role": "text",
-      "job_level": "text",
-      "manager_id": "text",
-      "hire_date": "date",
-      "exit_date": "date",
-      "employment_status": "text",
-      "critical_role_flag": "number",
-      "base_salary": "number",
-      "currency": "text",
-      "protected_attributes_excluded_flag": "number"
-    }
+    ]
   },
   "dim-organisation": {
     "table": "dim_organisation",
@@ -588,22 +476,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "org_unit_id": "text",
-      "parent_org_id": "text",
-      "entity_id": "text",
-      "entity": "text",
-      "region": "text",
-      "business_unit": "text",
-      "department": "text",
-      "location": "text",
-      "currency": "text",
-      "active_from": "date",
-      "active_to": "text",
-      "accountable_role_id": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "dim-product-service": {
     "table": "dim_product_service",
@@ -649,18 +522,7 @@ const TABLES = {
         "column": "active_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "offering_id": "text",
-      "offering_name": "text",
-      "business_unit": "text",
-      "offering_type": "text",
-      "margin_class": "text",
-      "list_price": "number",
-      "direct_cost_ratio": "number",
-      "strategic_priority": "text",
-      "active_flag": "number"
-    }
+    ]
   },
   "dim-risk-control": {
     "table": "dim_risk_control",
@@ -731,21 +593,7 @@ const TABLES = {
         "column": "risk_owner_role_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "control_id": "text",
-      "risk_id": "text",
-      "process": "text",
-      "control_name": "text",
-      "control_type": "text",
-      "frequency": "text",
-      "key_control_flag": "number",
-      "control_owner_role_id": "text",
-      "active_flag": "number",
-      "risk_name": "text",
-      "inherent_risk": "text",
-      "risk_owner_role_id": "text"
-    }
+    ]
   },
   "dim-vendor": {
     "table": "dim_vendor",
@@ -801,18 +649,7 @@ const TABLES = {
         "column": "active_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "vendor_id": "text",
-      "vendor_name": "text",
-      "region": "text",
-      "category": "text",
-      "criticality": "text",
-      "approved_status": "text",
-      "bank_account_token": "text",
-      "risk_rating": "text",
-      "active_flag": "number"
-    }
+    ]
   },
   "fact-access-sod-event": {
     "table": "fact_access_sod_event",
@@ -868,20 +705,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "access_event_id": "text",
-      "event_date": "date",
-      "employee_id": "text",
-      "org_unit_id": "text",
-      "event_type": "text",
-      "system_name": "text",
-      "conflict_flag": "number",
-      "privileged_flag": "number",
-      "approval_status": "text",
-      "days_open": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-ap-invoice-payment": {
     "table": "fact_ap_invoice_payment",
@@ -947,23 +771,7 @@ const TABLES = {
         "column": "approver_role_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "ap_invoice_id": "text",
-      "invoice_date": "date",
-      "org_unit_id": "text",
-      "vendor_id": "text",
-      "invoice_amount": "number",
-      "due_date": "date",
-      "payment_date": "date",
-      "payment_terms_days": "number",
-      "invoice_status": "text",
-      "duplicate_indicator": "number",
-      "split_invoice_indicator": "number",
-      "bank_change_proximity_flag": "number",
-      "po_match_status": "text",
-      "approver_role_id": "text"
-    }
+    ]
   },
   "fact-ar-invoice-payment": {
     "table": "fact_ar_invoice_payment",
@@ -1044,26 +852,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "ar_invoice_id": "text",
-      "sales_id": "text",
-      "invoice_date": "date",
-      "org_unit_id": "text",
-      "customer_id": "text",
-      "invoice_amount": "number",
-      "due_date": "date",
-      "expected_payment_date": "date",
-      "actual_payment_date": "text",
-      "outstanding_amount": "number",
-      "days_to_pay": "number",
-      "days_past_due": "number",
-      "dispute_flag": "number",
-      "billing_error_flag": "number",
-      "missing_approval_flag": "number",
-      "collection_status": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-audit-finding": {
     "table": "fact_audit_finding",
@@ -1124,21 +913,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "finding_id": "text",
-      "org_unit_id": "text",
-      "process": "text",
-      "issue_date": "date",
-      "severity": "text",
-      "finding_title": "text",
-      "monetary_exposure": "number",
-      "issue_owner_role_id": "text",
-      "target_date": "date",
-      "status": "text",
-      "repeat_finding_flag": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-budget-forecast": {
     "table": "fact_budget_forecast",
@@ -1195,21 +970,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "month_id": "number",
-      "org_unit_id": "text",
-      "cost_center_id": "text",
-      "account_id": "text",
-      "account_category": "text",
-      "version": "text",
-      "budget_amount": "number",
-      "forecast_amount": "number",
-      "actual_amount": "number",
-      "assumptions_id": "text",
-      "owner_role_id": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-cash-position": {
     "table": "fact_cash_position",
@@ -1241,18 +1002,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "date_id": "number",
-      "entity_id": "text",
-      "currency": "text",
-      "opening_balance": "number",
-      "cash_inflow": "number",
-      "cash_outflow": "number",
-      "closing_balance": "number",
-      "restricted_cash": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-contract-pipeline": {
     "table": "fact_contract_pipeline",
@@ -1343,25 +1093,7 @@ const TABLES = {
         "column": "contract_complexity",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "opportunity_id": "text",
-      "contract_id": "text",
-      "created_date": "date",
-      "customer_id": "text",
-      "offering_id": "text",
-      "org_unit_id": "text",
-      "owner_role_id": "text",
-      "stage": "text",
-      "probability": "number",
-      "booking_value": "number",
-      "expected_start_date": "date",
-      "expected_end_date": "date",
-      "renewal_date": "date",
-      "sla_tier": "text",
-      "won_lost_reason": "text",
-      "contract_complexity": "text"
-    }
+    ]
   },
   "fact-control-exception": {
     "table": "fact_control_exception",
@@ -1422,22 +1154,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "exception_id": "text",
-      "control_id": "text",
-      "transaction_ref": "text",
-      "org_unit_id": "text",
-      "exception_date": "date",
-      "exception_type": "text",
-      "severity": "text",
-      "monetary_exposure": "number",
-      "repeat_flag": "number",
-      "owner_role_id": "text",
-      "status": "text",
-      "root_cause": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-control-test": {
     "table": "fact_control_test",
@@ -1483,21 +1200,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "test_id": "text",
-      "control_id": "text",
-      "org_unit_id": "text",
-      "test_period": "text",
-      "test_date": "date",
-      "population_size": "number",
-      "sample_size": "number",
-      "result": "text",
-      "exception_count": "number",
-      "evidence_quality": "text",
-      "tester_employee_id": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-customer-monthly": {
     "table": "fact_customer_monthly",
@@ -1544,31 +1247,7 @@ const TABLES = {
         "column": "renewal_within_180d_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "customer_id": "text",
-      "month_id": "number",
-      "revenue": "number",
-      "gross_margin": "number",
-      "order_count": "number",
-      "average_discount_pct": "number",
-      "service_cases": "number",
-      "disputes": "number",
-      "sla_breaches": "number",
-      "credit_notes": "number",
-      "dso_days": "number",
-      "outstanding_balance": "number",
-      "invoice_count": "number",
-      "segment": "text",
-      "region": "text",
-      "credit_rating": "text",
-      "strategic_flag": "number",
-      "gross_margin_pct": "number",
-      "dispute_rate": "number",
-      "service_health_score": "number",
-      "relationship_engagement_score": "number",
-      "renewal_within_180d_flag": "number"
-    }
+    ]
   },
   "fact-customer-service": {
     "table": "fact_customer_service",
@@ -1629,22 +1308,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "case_id": "text",
-      "opened_date": "date",
-      "closed_date": "date",
-      "org_unit_id": "text",
-      "customer_id": "text",
-      "case_type": "text",
-      "severity": "text",
-      "sla_breach_flag": "number",
-      "dispute_flag": "number",
-      "credit_note_amount": "number",
-      "resolution_days": "number",
-      "root_cause": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-discount-approval": {
     "table": "fact_discount_approval",
@@ -1706,21 +1370,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "approval_id": "text",
-      "sales_id": "text",
-      "date_id": "number",
-      "org_unit_id": "text",
-      "customer_id": "text",
-      "requested_discount_pct": "number",
-      "policy_limit_pct": "number",
-      "approval_status": "text",
-      "override_flag": "number",
-      "approver_role_id": "text",
-      "override_reason": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-employee-monthly": {
     "table": "fact_employee_monthly",
@@ -1777,24 +1427,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "employee_id": "text",
-      "month_id": "number",
-      "org_unit_id": "text",
-      "role": "text",
-      "manager_id": "text",
-      "fte": "number",
-      "base_pay_monthly": "number",
-      "variable_pay_monthly": "number",
-      "employment_status": "text",
-      "tenure_years": "number",
-      "performance_band": "text",
-      "critical_role_flag": "number",
-      "engagement_score": "number",
-      "workload_index": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-engagement-performance": {
     "table": "fact_engagement_performance",
@@ -1836,19 +1469,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "survey_record_id": "text",
-      "employee_id": "text",
-      "quarter_id": "number",
-      "org_unit_id": "text",
-      "engagement_score": "number",
-      "manager_effectiveness_score": "number",
-      "career_opportunity_score": "number",
-      "workload_sustainability_score": "number",
-      "performance_band": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-gl-transaction": {
     "table": "fact_gl_transaction",
@@ -1919,25 +1540,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "journal_id": "text",
-      "line_id": "number",
-      "posting_date": "date",
-      "account_id": "text",
-      "org_unit_id": "text",
-      "cost_center_id": "text",
-      "debit": "number",
-      "credit": "number",
-      "currency": "text",
-      "source_system": "text",
-      "manual_flag": "number",
-      "preparer_employee_id": "text",
-      "approver_employee_id": "text",
-      "journal_type": "text",
-      "description": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-hire-exit": {
     "table": "fact_hire_exit",
@@ -1988,20 +1591,7 @@ const TABLES = {
         "column": "regrettable_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "event_id": "text",
-      "employee_id": "text",
-      "event_date": "date",
-      "event_type": "text",
-      "voluntary_flag": "number",
-      "exit_reason": "text",
-      "previous_org_unit_id": "text",
-      "new_org_unit_id": "text",
-      "role": "text",
-      "replacement_required": "number",
-      "regrettable_flag": "number"
-    }
+    ]
   },
   "fact-issue-remediation": {
     "table": "fact_issue_remediation",
@@ -2062,20 +1652,7 @@ const TABLES = {
         "column": "residual_risk",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "remediation_id": "text",
-      "finding_id": "text",
-      "start_date": "date",
-      "target_date": "date",
-      "completion_date": "text",
-      "status": "text",
-      "owner_role_id": "text",
-      "milestone_completion_pct": "number",
-      "overdue_flag": "number",
-      "validation_required_flag": "number",
-      "residual_risk": "text"
-    }
+    ]
   },
   "fact-learning-compensation": {
     "table": "fact_learning_compensation",
@@ -2116,18 +1693,7 @@ const TABLES = {
         "column": "critical_skill_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "learning_comp_id": "text",
-      "employee_id": "text",
-      "event_date": "date",
-      "org_unit_id": "text",
-      "event_type": "text",
-      "learning_hours": "number",
-      "compensation_change_pct": "number",
-      "completion_status": "text",
-      "critical_skill_flag": "number"
-    }
+    ]
   },
   "fact-manual-journal": {
     "table": "fact_manual_journal",
@@ -2188,22 +1754,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "manual_journal_id": "text",
-      "journal_id": "text",
-      "posting_date": "date",
-      "org_unit_id": "text",
-      "amount": "number",
-      "preparer_employee_id": "text",
-      "approver_employee_id": "text",
-      "late_posting_flag": "number",
-      "weekend_posting_flag": "number",
-      "round_amount_flag": "number",
-      "same_preparer_approver_flag": "number",
-      "risk_score": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-reconciliation-close": {
     "table": "fact_reconciliation_close",
@@ -2270,21 +1821,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "close_task_id": "text",
-      "month_id": "number",
-      "entity_id": "text",
-      "task_name": "text",
-      "owner_role_id": "text",
-      "due_date": "date",
-      "completion_date": "date",
-      "late_flag": "number",
-      "adjustment_required_flag": "number",
-      "reconciliation_exception_count": "number",
-      "status": "text",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-sales-transaction": {
     "table": "fact_sales_transaction",
@@ -2346,26 +1883,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "sales_id": "text",
-      "date_id": "number",
-      "org_unit_id": "text",
-      "customer_id": "text",
-      "offering_id": "text",
-      "contract_id": "text",
-      "quantity": "number",
-      "list_price": "number",
-      "discount_pct": "number",
-      "net_revenue": "number",
-      "direct_cost": "number",
-      "gross_margin": "number",
-      "currency": "text",
-      "channel": "text",
-      "status": "text",
-      "discount_override_indicator": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-time-attendance": {
     "table": "fact_time_attendance",
@@ -2407,20 +1925,7 @@ const TABLES = {
         "column": "timesheet_late_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "employee_id": "text",
-      "month_id": "number",
-      "org_unit_id": "text",
-      "story_scope_flag": "number",
-      "scheduled_hours": "number",
-      "worked_hours": "number",
-      "overtime_hours": "number",
-      "absence_hours": "number",
-      "absence_type": "text",
-      "utilisation_pct": "number",
-      "timesheet_late_flag": "number"
-    }
+    ]
   },
   "fact-vacancy-recruitment": {
     "table": "fact_vacancy_recruitment",
@@ -2481,22 +1986,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "vacancy_id": "text",
-      "org_unit_id": "text",
-      "role": "text",
-      "open_date": "date",
-      "target_fill_date": "date",
-      "actual_fill_date": "text",
-      "status": "text",
-      "critical_role_flag": "number",
-      "time_to_fill_days": "number",
-      "candidate_pipeline_count": "number",
-      "hiring_manager_role_id": "text",
-      "recruitment_cost": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "fact-vendor-master-change": {
     "table": "fact_vendor_master_change",
@@ -2557,20 +2047,7 @@ const TABLES = {
         "column": "risk_indicator_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "vendor_change_id": "text",
-      "change_date": "date",
-      "vendor_id": "text",
-      "change_type": "text",
-      "old_value_token": "text",
-      "new_value_token": "text",
-      "requestor_employee_id": "text",
-      "approver_employee_id": "text",
-      "emergency_change_flag": "number",
-      "payment_within_7d_flag": "number",
-      "risk_indicator_flag": "number"
-    }
+    ]
   },
   "meta-endpoint-catalog": {
     "table": "meta_endpoint_catalog",
@@ -2596,12 +2073,7 @@ const TABLES = {
         "column": "source_tables",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "endpoint": "text",
-      "purpose": "text",
-      "source_tables": "text"
-    }
+    ]
   },
   "meta-kpi-definition": {
     "table": "meta_kpi_definition",
@@ -2632,13 +2104,7 @@ const TABLES = {
         "column": "authoritative_source",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "kpi_name": "text",
-      "definition": "text",
-      "unit": "text",
-      "authoritative_source": "text"
-    }
+    ]
   },
   "meta-latent-drivers-monthly": {
     "table": "meta_latent_drivers_monthly",
@@ -2664,20 +2130,7 @@ const TABLES = {
         "column": "story_scope_flag",
         "kind": "flag"
       }
-    ],
-    "columns": {
-      "org_unit_id": "text",
-      "month_id": "number",
-      "month_start": "date",
-      "demand_index": "number",
-      "pricing_pressure_index": "number",
-      "capacity_index": "number",
-      "engagement_index": "number",
-      "control_maturity_index": "number",
-      "service_complexity_index": "number",
-      "collection_effectiveness_index": "number",
-      "story_scope_flag": "number"
-    }
+    ]
   },
   "meta-model-registry": {
     "table": "meta_model_registry",
@@ -2743,19 +2196,7 @@ const TABLES = {
         "column": "intended_use",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "model_id": "text",
-      "model_name": "text",
-      "model_version": "text",
-      "method": "text",
-      "as_of_date": "date",
-      "training_start": "date",
-      "training_end": "date",
-      "approved_flag": "number",
-      "owner": "text",
-      "intended_use": "text"
-    }
+    ]
   },
   "pred-control-risk": {
     "table": "pred_control_risk",
@@ -2816,28 +2257,7 @@ const TABLES = {
         "column": "run_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "prediction_id": "text",
-      "entity_id": "text",
-      "entity": "text",
-      "region": "text",
-      "process": "text",
-      "as_of_date": "date",
-      "forecast_quarter": "text",
-      "material_exception_probability": "number",
-      "expected_exception_count": "number",
-      "expected_monetary_exposure": "number",
-      "risk_band": "text",
-      "driver_1": "text",
-      "driver_2": "text",
-      "driver_3": "text",
-      "recommended_review_priority": "number",
-      "confidence_score": "number",
-      "model_id": "text",
-      "model_version": "text",
-      "run_id": "text"
-    }
+    ]
   },
   "pred-customer-risk": {
     "table": "pred_customer_risk",
@@ -2893,27 +2313,7 @@ const TABLES = {
         "column": "run_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "prediction_id": "text",
-      "customer_id": "text",
-      "as_of_date": "date",
-      "forecast_month": "date",
-      "horizon_days": "number",
-      "renewal_probability": "number",
-      "churn_probability": "number",
-      "late_payment_probability": "number",
-      "revenue_at_risk": "number",
-      "cash_at_risk": "number",
-      "risk_band": "text",
-      "driver_1": "text",
-      "driver_2": "text",
-      "driver_3": "text",
-      "confidence_score": "number",
-      "model_id": "text",
-      "model_version": "text",
-      "run_id": "text"
-    }
+    ]
   },
   "pred-financial-forecast": {
     "table": "pred_financial_forecast",
@@ -2974,33 +2374,7 @@ const TABLES = {
         "column": "run_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "prediction_id": "text",
-      "as_of_date": "date",
-      "forecast_month": "date",
-      "org_unit_id": "text",
-      "region": "text",
-      "business_unit": "text",
-      "scenario_id": "text",
-      "revenue_forecast": "number",
-      "gross_margin_forecast": "number",
-      "ebitda_forecast": "number",
-      "ebitda_margin_pct": "number",
-      "operating_cash_flow_forecast": "number",
-      "dso_days": "number",
-      "revenue_low": "number",
-      "revenue_high": "number",
-      "ebitda_margin_low": "number",
-      "ebitda_margin_high": "number",
-      "top_driver_1": "text",
-      "top_driver_2": "text",
-      "top_driver_3": "text",
-      "model_id": "text",
-      "model_version": "text",
-      "run_id": "text",
-      "confidence_score": "number"
-    }
+    ]
   },
   "pred-workforce-risk": {
     "table": "pred_workforce_risk",
@@ -3061,29 +2435,7 @@ const TABLES = {
         "column": "run_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "prediction_id": "text",
-      "org_unit_id": "text",
-      "region": "text",
-      "business_unit": "text",
-      "role_cohort": "text",
-      "as_of_date": "date",
-      "horizon_days": "number",
-      "headcount": "number",
-      "attrition_probability": "number",
-      "expected_exits": "number",
-      "expected_capacity_gap_fte": "number",
-      "revenue_or_service_impact_usd": "number",
-      "risk_band": "text",
-      "driver_1": "text",
-      "driver_2": "text",
-      "driver_3": "text",
-      "confidence_score": "number",
-      "model_id": "text",
-      "model_version": "text",
-      "run_id": "text"
-    }
+    ]
   },
   "scenario-simulation": {
     "table": "scenario_simulation",
@@ -3124,25 +2476,7 @@ const TABLES = {
         "column": "calculation_run_id",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "scenario_result_id": "text",
-      "scope_id": "text",
-      "scenario_id": "text",
-      "as_of_date": "date",
-      "investment_usd_m": "number",
-      "net_headcount_growth_pct": "number",
-      "ebitda_margin_pct": "number",
-      "dso_days": "number",
-      "cohort_attrition_pct": "number",
-      "control_risk_index": "number",
-      "six_month_net_cash_benefit_usd_m": "number",
-      "revenue_growth_pct": "number",
-      "execution_risk": "text",
-      "recommended_flag": "number",
-      "rationale": "text",
-      "calculation_run_id": "text"
-    }
+    ]
   },
   "serving-control-risk-scorecard-quarterly": {
     "table": "serving_control_risk_scorecard_quarterly",
@@ -3174,18 +2508,7 @@ const TABLES = {
         "column": "risk_band",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "region": "text",
-      "business_unit": "text",
-      "quarter_id": "text",
-      "exception_count": "number",
-      "high_risk_count": "number",
-      "repeat_count": "number",
-      "monetary_exposure": "number",
-      "control_risk_index": "number",
-      "risk_band": "text"
-    }
+    ]
   },
   "serving-executive-scorecard-monthly": {
     "table": "serving_executive_scorecard_monthly",
@@ -3222,41 +2545,7 @@ const TABLES = {
         "column": "scope_type",
         "kind": "string"
       }
-    ],
-    "columns": {
-      "region": "text",
-      "business_unit": "text",
-      "month_id": "number",
-      "revenue": "number",
-      "gross_margin": "number",
-      "average_discount_pct": "number",
-      "transactions": "number",
-      "headcount": "number",
-      "workforce_cost": "number",
-      "engagement_score": "number",
-      "overtime_hours": "number",
-      "absence_hours": "number",
-      "utilisation_pct": "number",
-      "exit_count": "number",
-      "dso_days": "number",
-      "outstanding_ar": "number",
-      "disputed_ar": "number",
-      "control_exceptions": "number",
-      "high_risk_exceptions": "number",
-      "control_exposure": "number",
-      "vacancies_opened": "number",
-      "critical_vacancies": "number",
-      "gross_margin_pct": "number",
-      "attrition_rate_pct": "number",
-      "ebitda_margin_pct": "number",
-      "ebitda": "number",
-      "operating_cash_flow": "number",
-      "control_risk_index": "number",
-      "scope_id": "text",
-      "scope_type": "text",
-      "as_of_date": "date",
-      "revenue_yoy_pct": "number"
-    }
+    ]
   },
   "serving-margin-bridge": {
     "table": "serving_margin_bridge",
@@ -3302,22 +2591,12 @@ const TABLES = {
         "column": "sequence",
         "kind": "int"
       }
-    ],
-    "columns": {
-      "bridge_id": "text",
-      "scope_id": "text",
-      "period_start": "date",
-      "period_end": "date",
-      "comparison_period": "text",
-      "component": "text",
-      "sequence": "number",
-      "margin_before_pct": "number",
-      "impact_percentage_points": "number",
-      "margin_after_pct": "number",
-      "estimated_ebitda_impact_usd": "number",
-      "evidence_reference": "text"
-    }
+    ]
   }
 };
+
+// Column kinds (text, number, date) live in their own file to keep this one readable.
+const COLUMNS = require('./apex-table-columns');
+for (const [key, table] of Object.entries(TABLES)) table.columns = COLUMNS[key];
 
 module.exports = { TABLES };

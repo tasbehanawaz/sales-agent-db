@@ -41,4 +41,7 @@ test('aggregation totals in SQL with float averages and validated names', () => 
   assert.ok(aggregation(close, { group_by: 'business_unit' }).error, 'no business unit on entity tables');
   assert.ok(aggregation(close, { group_by: 'task_name', sort: 'revenue' }).error);
   assert.ok(aggregation(TABLES['serving-control-risk-scorecard-quarterly'], { group_by: 'month' }).error, 'quarterly table has no month');
+  assert.ok(aggregation(close, { group_by: 'constructor' }).error, 'Object.prototype names are not columns');
+  assert.ok(aggregation(close, { metrics: 'distinct:toString' }).error);
+  assert.deepEqual(aggregation(close, { group_by: 'status,status', metrics: 'count,count' }).metrics, ['count'], 'repeated names are dropped');
 });

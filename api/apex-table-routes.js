@@ -160,15 +160,20 @@ function tableFilters(spec, q, params) {
   return { clauses, params, join };
 }
 
-const CONTROL_PARAMS = ['limit', 'from', 'to', 'group_by', 'metrics', 'sort'];
+const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort'];
 
 function unknownParams(spec, q) {
-  const known = new Set([...CONTROL_PARAMS, ...spec.filters.map((f) => f.param), ...organisation(spec).names]);
+  const known = new Set([...CONTROL_PARAMS, ...(spec.dateColumn ? ['from', 'to'] : []), ...spec.filters.map((f) => f.param), ...organisation(spec).names]);
   return Object.keys(q).filter((name) => !known.has(name));
 }
 
 function list(value) {
-  return (strParam(value) || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return [...new Set((strParam(value) || '').split(',').map((s) => s.trim()).filter(Boolean))];
+}
+
+// Object.hasOwn, so names such as "constructor" are not mistaken for columns.
+function columnKind(spec, name) {
+  return Object.hasOwn(spec.columns, name) ? spec.columns[name] : null;
 }
 
 /**
@@ -185,7 +190,7 @@ function aggregation(spec, q) {
   let join = '';
   const groups = [];
   for (const name of groupBy) {
-    if (spec.columns[name]) groups.push({ alias: name, expr: `t.[${name}]` });
+    if (columnKind(spec, name)) groups.push({ alias: name, expr: `t.[${name}]` });
     else if (org.names.includes(name)) {
       groups.push({ alias: name, expr: `o.[${name}]` });
       join = org.join;
@@ -203,11 +208,11 @@ function aggregation(spec, q) {
       continue;
     }
     const [fn, column] = metric.split(':');
-    if (fn === 'distinct' && (spec.columns[column] || org.names.includes(column))) {
-      const expr = spec.columns[column] ? `t.[${column}]` : `o.[${column}]`;
-      if (!spec.columns[column]) join = org.join;
+    if (fn === 'distinct' && (columnKind(spec, column) || org.names.includes(column))) {
+      const expr = columnKind(spec, column) ? `t.[${column}]` : `o.[${column}]`;
+      if (!columnKind(spec, column)) join = org.join;
       selects.push({ alias: `distinct_${column}`, expr: `COUNT(DISTINCT ${expr})` });
-    } else if (['sum', 'avg', 'min', 'max'].includes(fn) && spec.columns[column] === 'number') {
+    } else if (['sum', 'avg', 'min', 'max'].includes(fn) && columnKind(spec, column) === 'number') {
       selects.push({ alias: `${fn}_${column}`, expr: `ROUND(${fn.toUpperCase()}(CAST(t.[${column}] AS float)), 4)` });
     } else {
       return {
@@ -265,17 +270,21 @@ function handler(key) {
       }
 
       const rows = await query(
-        `SELECT TOP (@limit) ${agg.select}, SUM(COUNT(*)) OVER () AS [_rows_matched] FROM ${from} ${agg.groupBy} ORDER BY ${agg.order}`,
+        `SELECT TOP (@limit) ${agg.select}, SUM(COUNT(*)) OVER () AS [_rows_matched], COUNT(*) OVER () AS [_groups]
+         FROM ${from} ${agg.groupBy} ORDER BY ${agg.order}`,
         filters.params
       );
       const rowsMatched = rows.length ? rows[0]._rows_matched : 0;
-      const data = rows.map(({ _rows_matched, ...row }) => row);
+      const groups = rows.length ? rows[0]._groups : 0;
+      const data = rows.map(({ _rows_matched, _groups, ...row }) => row);
       res.json({
         success: true,
         count: data.length,
         table: spec.table,
         rows_in_database: spec.rows,
         rows_matched: rowsMatched,
+        groups_total: groups,
+        truncated: groups > data.length,
         group_by: agg.groups,
         metrics: agg.metrics,
         data,
