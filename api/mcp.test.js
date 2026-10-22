@@ -70,10 +70,35 @@ test('run_many validates each call like a single call and keeps the order', asyn
     assert.match(results[0].result, /Invalid arguments for sales_doctors_by_id/);
     assert.equal(both.isError, true, 'all calls failed');
 
+    const nulls = JSON.parse((await call({ calls: [{ tool: 'sales_stats', arguments: null }] })).content[0].text);
+    assert.doesNotMatch(String(nulls.results[0].result), /Invalid arguments/, 'null arguments are accepted as in a single call');
+
     assert.equal((await call({ calls: [] })).isError, true, 'empty list');
     assert.equal((await call({ calls: [{ tool: 'run_many' }] })).isError, true, 'no nesting');
     const tooMany = Array.from({ length: RUN_MANY.inputSchema.properties.calls.maxItems + 1 }, () => ({ tool: 'sales_stats' }));
     assert.equal((await call({ calls: tooMany })).isError, true, 'capped');
+  } finally {
+    server.close();
+  }
+});
+
+test('run_many returns every result even when some calls cannot reach the API', async () => {
+  const app = express();
+  app.use(express.json());
+  const server = app.listen(0);
+  const closed = app.listen(0);
+  const closedPort = closed.address().port;
+  closed.close();
+  app.post('/mcp', mcpHandler({ port: closedPort, apiKey: 'unused' }));
+  const url = `http://127.0.0.1:${server.address().port}/mcp`;
+  try {
+    const calls = Array.from({ length: 7 }, (_, i) => ({ tool: i % 2 ? 'sales_stats' : 'apex_tables' }));
+    const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'run_many', arguments: { calls } } };
+    const res = await (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+    assert.ok(res.result, 'a per-call failure is not a JSON-RPC error for the whole batch');
+    const { results } = JSON.parse(res.result.content[0].text);
+    assert.deepEqual(results.map((r) => r.tool), calls.map((c) => c.tool), 'order kept across parallel groups');
+    assert.ok(results.every((r) => r.isError && /ECONNREFUSED/.test(r.result)));
   } finally {
     server.close();
   }

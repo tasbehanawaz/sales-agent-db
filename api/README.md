@@ -70,7 +70,7 @@ Send the API key as `x-api-key`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
 - `run_many` runs up to 10 tools in parallel in one call: `{"calls":[{"tool":"apex_customer_risk","arguments":{"limit":10}},{"tool":"sales_insights"}]}`.
   The reply is `{"results":[{"tool","isError","result"}]}` in call order, each `result` being that tool's normal reply. Each call
-  is validated on its own, so one bad call does not fail the others. An agent that needs several figures gets them in one
+  is validated and run on its own (five at a time), so a bad or timed-out call fails only itself. An agent that needs several figures gets them in one
   step instead of one step per tool.
 - Tool inputs come from `swagger.js`, so a new or changed endpoint documented there shows up as a tool.
 
