@@ -67,7 +67,7 @@ Send the API key as `x-api-key`.
   instead of ignored. On tables keyed by `month_id`, `date_id` or `quarter_id`, `from`/`to` cover whole months, days
   or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
-- `apex_chart` draws those totals as a `bar`, `line`, `pie` or `heatmap` image. It takes `apex_table`'s arguments plus `chart_type` and `title`;
+- `apex_chart` draws those totals as an image: `bar`, `horizontal_bar`, `stacked_bar`, `line`, `area`, `combo`, `pie`, `donut`, `heatmap`, `scatter`, `bubble`, `radar`, `histogram` or `waterfall`. It takes `apex_table`'s arguments plus `chart_type` and `title`;
   the first `group_by` column is the x axis and a second is the series (or the heatmap's y axis). The reply has `markdown` (the image), `data` (the
   plotted figures) and `notes` (caveats). A chart that can't be drawn as asked is refused with the change that would fix it.
   Images are drawn by quickchart.io, so the plotted figures are sent there inside the image URL.

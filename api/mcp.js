@@ -43,8 +43,11 @@ const APEX_CHART_GUIDE = [
   'Draw a chart of any Apex Group table, for any measure, breakdown, date range and filter. Use it whenever the user asks to see a chart, graph, trend or visual.',
   'Table, group_by, metrics, filters, from, to, sort and limit work exactly as in apex_table, which also lists where each topic lives. Call apex_tables for a table\'s columns.',
   'The first group_by column is the x axis. A second group_by column is one line or set of bars per value: use quarter,business_unit for a line per business unit.',
-  'bar and line take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie takes 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
-  'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". A pie needs every group, so it refuses a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
+  'bar, horizontal_bar, stacked_bar, line and area take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie and donut take 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
+  'combo takes 1 group_by and 2 metrics (bars, then a line on its own scale), for a total beside a rate. scatter takes 1 group_by and 2 metrics (x, y); bubble takes 3 (x, y, size); use them to compare measures across items.',
+  'radar takes 1 or 2 group_by with 1 metric, or 1 group_by with 3 or more metrics. histogram takes 1 metric, and group_by sets what is counted: group_by customer_id counts customers in each range.',
+  'waterfall takes 1 group_by and shows how values add up to a total in the order given: set it with sort, adding min:sequence as a second metric if needed.',
+  'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". pie, donut, histogram and waterfall need every group, so they refuse a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
   'Reply: markdown holds the image to show, data holds the plotted figures, notes holds caveats to pass on.',
 ].join(' ');

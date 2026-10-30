@@ -141,6 +141,81 @@ test('week numbers read in numeric order', () => {
   assert.deepEqual(configOf(draw('line', rows, ['week_of_year'], ['sum_v'])).data.labels, ['1', '2', '10']);
 });
 
+test('bar and line variations share their data and differ in shape', () => {
+  const rows = [{ a: 'x', b: 'p', sum_v: 1 }, { a: 'x', b: 'q', sum_v: 2 }];
+  const stacked = configOf(draw('stacked_bar', rows, ['a', 'b'], ['sum_v']));
+  assert.equal(stacked.options.scales.y.stacked, true);
+  assert.equal(stacked.options.scales.x.stacked, true);
+
+  const horizontal = configOf(draw('horizontal_bar', rows, ['a', 'b'], ['sum_v']));
+  assert.equal(horizontal.options.indexAxis, 'y');
+  assert.equal(typeof horizontal.options.scales.x.ticks.callback, 'function', 'values run along x');
+
+  const area = configOf(draw('area', rows, ['a', 'b'], ['sum_v']));
+  assert.deepEqual([area.type, area.data.datasets[0].fill, area.options.scales.y.beginAtZero], ['line', true, true]);
+  assert.equal(configOf(draw('donut', [{ a: 'x', sum_v: 1 }], ['a'], ['sum_v'])).type, 'doughnut');
+});
+
+test('combo puts the first metric in bars and the second in a line on its own scale', () => {
+  const { data } = configOf(draw('combo', [{ a: 'x', sum_r: 100, avg_m: 0.4 }], ['a'], ['sum_r', 'avg_m']));
+  const bar = data.datasets.find((d) => d.type === 'bar');
+  const line = data.datasets.find((d) => d.type === 'line');
+  assert.deepEqual([bar.data, bar.yAxisID, line.data, line.yAxisID], [[100], 'y', [0.4], 'y1']);
+});
+
+test('scatter and bubble plot one point per group, and bubble area follows the third metric', () => {
+  const rows = [{ a: 'x', m1: 1, m2: 2, m3: 100 }, { a: 'y', m1: 3, m2: 4, m3: 25 }, { a: 'z', m1: null, m2: 4, m3: 1 }];
+  const scatter = configOf(draw('scatter', rows, ['a'], ['m1', 'm2'])).data.datasets[0].data;
+  assert.deepEqual(scatter, [{ x: 1, y: 2, l: 'x' }, { x: 3, y: 4, l: 'y' }], 'a point missing a value is left out');
+  const bubble = configOf(draw('bubble', rows, ['a'], ['m1', 'm2', 'm3'])).data.datasets[0].data;
+  assert.deepEqual(bubble.map((p) => p.r), [20, 12], 'the radius is proportional to the square root');
+});
+
+test('radar scales mixed metrics per axis and says so, but plots one metric as stored', () => {
+  const rows = [{ a: 'x', m1: 10, m2: 0.5, m3: 200 }, { a: 'y', m1: 5, m2: 1, m3: 100 }];
+  const scaled = draw('radar', rows, ['a'], ['m1', 'm2', 'm3']);
+  assert.deepEqual(configOf(scaled).data.datasets.map((d) => d.data), [[100, 50, 100], [50, 100, 50]]);
+  assert.match(scaled.notes[0], /scaled/);
+  assert.deepEqual(scaled.data, rows.map((r) => r), 'data keeps the real figures');
+
+  const axes = [{ a: 'x', v: 1 }, { a: 'y', v: 2 }, { a: 'z', v: 3 }];
+  assert.deepEqual(configOf(draw('radar', axes, ['a'], ['v'])).data.datasets[0].data, [1, 2, 3]);
+  assert.match(draw('radar', axes.slice(0, 2), ['a'], ['v']).error, /at least 3 axes/);
+});
+
+test('histogram counts every value exactly once, including the maximum', () => {
+  const rows = Array.from({ length: 16 }, (_, i) => ({ a: `c${i}`, sum_v: i }));
+  const chart = draw('histogram', rows, ['a'], ['sum_v']);
+  assert.equal(chart.data.length, 5);
+  assert.equal(chart.data.reduce((n, b) => n + b.count, 0), 16);
+  assert.equal(chart.data[4].count, 4, 'the maximum falls in the last bin');
+  assert.deepEqual(draw('histogram', [{ a: 'x', sum_v: 7 }, { a: 'y', sum_v: 7 }], ['a'], ['sum_v']).data.map((b) => b.count), [2], 'identical values do not divide by zero');
+  assert.equal(draw('histogram', [{ a: 'x', b: 'y', c: 'z', sum_v: 1 }], ['a', 'b', 'c'], ['sum_v']).success, true, 'group_by only defines what is counted');
+});
+
+test('waterfall bars start where the last ended and finish on a total', () => {
+  const { data } = configOf(draw('waterfall', [{ a: 'p', v: 10 }, { a: 'q', v: -4 }, { a: 'r', v: 1 }], ['a'], ['v']));
+  assert.deepEqual(data.labels, ['p', 'q', 'r', 'Total']);
+  assert.deepEqual(data.datasets[0].data, [[0, 10], [10, 6], [6, 7], [0, 7]]);
+});
+
+test('charts that would be wrong without every group refuse a cut-off list', () => {
+  const cut = reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v'], { truncated: true, groups_total: 9 });
+  for (const chartType of ['pie', 'donut', 'histogram', 'waterfall']) {
+    assert.match(buildChart({ chartType, title: 'T', reply: cut, limited: true }).error, /needs every group/, chartType);
+  }
+});
+
+test('each chart type says what shape it needs', () => {
+  const row = [{ a: 'x', b: 'y', m1: 1, m2: 2 }];
+  assert.match(draw('combo', row, ['a'], ['m1']).error, /combo needs/);
+  assert.match(draw('scatter', row, ['a'], ['m1']).error, /scatter needs/);
+  assert.match(draw('bubble', row, ['a'], ['m1', 'm2']).error, /bubble needs/);
+  assert.match(draw('radar', row, ['a'], ['m1', 'm2']).error, /radar takes/);
+  assert.match(draw('histogram', row, ['a'], ['m1', 'm2']).error, /histogram needs/);
+  assert.match(draw('waterfall', row, ['a', 'b'], ['m1']).error, /waterfall needs/);
+});
+
 test('an average of a percentage carries a caveat, a sum does not', () => {
   const rows = [{ a: 'x', avg_gross_margin_pct: 0.4, sum_v: 1 }];
   assert.match(draw('bar', rows, ['a'], ['avg_gross_margin_pct']).notes[0], /count every row equally/);
