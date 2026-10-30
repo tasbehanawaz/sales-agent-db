@@ -18,8 +18,6 @@ const MAX_RADAR_SERIES = 6;
 const MAX_HISTOGRAM_BINS = 12;
 const POSITIVE = '#54A24B';
 const NEGATIVE = '#E45756';
-// Keeps a value label on the tallest bar clear of the title.
-const LABEL_ROOM = { padding: { top: 22, right: 12 } };
 const BAR_LABEL_LIMIT = 15;
 const WIDTH = 900;
 const HEIGHT = 500;
@@ -104,7 +102,8 @@ function pivot(rows, xName, seriesName, metric) {
 }
 
 function title(text) {
-  return { display: true, text, font: { size: 16 } };
+  // The bottom padding keeps a value label on the tallest bar clear of the title.
+  return { display: true, text, font: { size: 16 }, padding: { bottom: 22 } };
 }
 
 function axisTitle(text) {
@@ -133,7 +132,6 @@ function cartesian(kind, chartTitle, xs, series) {
     },
     options: {
       ...(horizontal && { indexAxis: 'y' }),
-      layout: LABEL_ROOM,
       plugins: {
         title: title(chartTitle),
         legend: { display: !single, position: 'bottom' },
@@ -222,7 +220,6 @@ function histogramConfig(chartTitle, bins, metric) {
     type: 'bar',
     data: { labels: bins.map((b) => b.range), datasets: [{ label: 'Count', data: bins.map((b) => b.count), backgroundColor: PALETTE[0], barPercentage: 1, categoryPercentage: 0.98 }] },
     options: {
-      layout: LABEL_ROOM,
       plugins: {
         title: title(chartTitle),
         legend: { display: false },
@@ -254,7 +251,6 @@ function waterfallConfig(chartTitle, xs, values) {
       }],
     },
     options: {
-      layout: LABEL_ROOM,
       plugins: {
         title: title(chartTitle),
         legend: { display: false },
