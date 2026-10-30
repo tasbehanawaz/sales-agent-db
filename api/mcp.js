@@ -46,7 +46,7 @@ const APEX_CHART_GUIDE = [
   'bar, horizontal_bar, stacked_bar, line and area take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie and donut take 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
   'combo takes 1 group_by and 2 metrics (bars, then a line on its own scale), for a total beside a rate. scatter takes 1 group_by and 2 metrics (x, y); bubble takes 3 (x, y, size); use them to compare measures across items.',
   'radar takes 1 or 2 group_by with 1 metric, or 1 group_by with 3 or more metrics. histogram takes 1 metric, and group_by sets what is counted: group_by customer_id counts customers in each range.',
-  'waterfall takes 1 group_by and shows how values add up to a total in the order given: set it with sort, adding min:sequence as a second metric if needed.',
+  'waterfall takes 1 group_by and shows how values add up to a total. Set the order with sort, adding min:sequence as a second metric if needed; without sort, time columns run oldest first and other columns largest first.',
   'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". pie, donut, stacked_bar, histogram and waterfall need every group, so they refuse a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
   'Reply: markdown holds the image to show, data holds the real figures behind it (bins for a histogram, rows plus Total for a waterfall), notes holds caveats to pass on.',
@@ -189,7 +189,7 @@ async function runEndpoint(tool, args, ctx) {
 async function runChart(tool, { chart_type: chartType, title, ...query }, ctx) {
   const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, query) });
   if (status >= 400) return { isError: true, text: body };
-  const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null, sorted: query.sort != null });
+  const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null, sorted: Boolean(String(query.sort ?? '').trim()) });
   return { isError: Boolean(chart.error), text: chart.error || JSON.stringify(chart) };
 }
 
