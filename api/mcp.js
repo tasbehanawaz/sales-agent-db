@@ -47,9 +47,9 @@ const APEX_CHART_GUIDE = [
   'combo takes 1 group_by and 2 metrics (bars, then a line on its own scale), for a total beside a rate. scatter takes 1 group_by and 2 metrics (x, y); bubble takes 3 (x, y, size); use them to compare measures across items.',
   'radar takes 1 or 2 group_by with 1 metric, or 1 group_by with 3 or more metrics. histogram takes 1 metric, and group_by sets what is counted: group_by customer_id counts customers in each range.',
   'waterfall takes 1 group_by and shows how values add up to a total in the order given: set it with sort, adding min:sequence as a second metric if needed.',
-  'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". pie, donut, histogram and waterfall need every group, so they refuse a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
+  'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". pie, donut, stacked_bar, histogram and waterfall need every group, so they refuse a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
-  'Reply: markdown holds the image to show, data holds the plotted figures, notes holds caveats to pass on.',
+  'Reply: markdown holds the image to show, data holds the real figures behind it (bins for a histogram, rows plus Total for a waterfall), notes holds caveats to pass on.',
 ].join(' ');
 const LOOPBACK_TIMEOUT_MS = 120000;
 
@@ -115,7 +115,7 @@ function buildTools() {
         table: { type: 'string', enum: Object.keys(APEX_TABLES) },
         chart_type: { type: 'string', enum: CHART_TYPES },
         title: { type: 'string', minLength: 1, description: 'Chart title, naming the measure, breakdown and period' },
-        group_by: { type: 'string', description: 'Comma-separated columns: x axis first, then the optional series or heatmap y axis' },
+        group_by: { type: 'string', description: 'Comma-separated columns. Usually the x axis first, then the optional series or heatmap y axis; see the description for scatter, bubble, radar and histogram' },
         metrics: { type: 'string', description: 'Comma-separated totals: count, distinct:<column>, sum|avg|min|max:<numeric column>' },
         from: { type: 'string', format: 'date', description: 'Start date (YYYY-MM-DD), for tables with a date column' },
         to: { type: 'string', format: 'date', description: 'End date (YYYY-MM-DD), for tables with a date column' },

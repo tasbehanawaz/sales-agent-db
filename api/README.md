@@ -68,8 +68,9 @@ Send the API key as `x-api-key`.
   or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
 - `apex_chart` draws those totals as an image: `bar`, `horizontal_bar`, `stacked_bar`, `line`, `area`, `combo`, `pie`, `donut`, `heatmap`, `scatter`, `bubble`, `radar`, `histogram` or `waterfall`. It takes `apex_table`'s arguments plus `chart_type` and `title`;
-  the first `group_by` column is the x axis and a second is the series (or the heatmap's y axis). The reply has `markdown` (the image), `data` (the
-  plotted figures) and `notes` (caveats). A chart that can't be drawn as asked is refused with the change that would fix it.
+  the first `group_by` column is usually the x axis and a second the series (or the heatmap's y axis); the tool description covers scatter, bubble,
+  radar and histogram. The reply has `markdown` (the image), `data` (the real figures behind it: bins for a histogram, rows plus Total for a waterfall)
+  and `notes` (caveats). A chart that can't be drawn as asked is refused with the change that would fix it.
   Images are drawn by quickchart.io, so the plotted figures are sent there inside the image URL.
   `{"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
