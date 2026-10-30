@@ -38,6 +38,48 @@ test('apex_chart requires what a chart needs and passes table filters through', 
   }
 });
 
+test('apex_chart asks the route for totals only and reports its answers', async () => {
+  const seen = [];
+  const api = express();
+  api.get('/api/apex/tables/:table', (req, res) => {
+    seen.push(req.query);
+    if (req.query.region === 'Nowhere') return res.status(400).json({ success: false, error: 'bad filter' });
+    const data = req.query.region === 'Empty' ? [] : [{ a: 'x', sum_v: 1 }];
+    res.json({ success: true, data, group_by: ['a'], metrics: ['sum_v'], truncated: Boolean(req.query.limit), groups_total: 5, rows_matched: 5 });
+  });
+  const backend = api.listen(0);
+  const app = express();
+  app.use(express.json());
+  app.post('/mcp', mcpHandler({ port: backend.address().port, apiKey: 'unused' }));
+  const server = app.listen(0);
+  const call = async (extra) => {
+    const args = { table: 'action-catalog', chart_type: 'bar', title: 'T', group_by: 'a', metrics: 'sum:v', ...extra };
+    const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'apex_chart', arguments: args } };
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const { result } = await res.json();
+    return { isError: result.isError, text: result.content[0].text };
+  };
+  try {
+    const drawn = await call({ region: 'North' });
+    assert.equal(drawn.isError, false);
+    assert.match(JSON.parse(drawn.text).markdown, /^!\[T\]\(https:/);
+    assert.deepEqual(seen[0], { group_by: 'a', metrics: 'sum:v', region: 'North' }, 'chart_type and title stay out of the route query');
+
+    const refused = await call({ region: 'Nowhere' });
+    assert.deepEqual([refused.isError, JSON.parse(refused.text).error], [true, 'bad filter'], 'route errors come back');
+
+    const empty = await call({ region: 'Empty' });
+    assert.equal(empty.isError, true, 'a chart that cannot be drawn is an error');
+    assert.match(empty.text, /No rows matched/);
+
+    const top = await call({ limit: 1, sort: '-sum_v' });
+    assert.match(JSON.parse(top.text).notes[0], /1 of 5/, 'limit allows a cut-off list and discloses it');
+  } finally {
+    server.close();
+    backend.close();
+  }
+});
+
 test('requestPath fills path params and encodes the query', () => {
   assert.equal(requestPath('/api/doctors/{id}', { id: 'a/b' }), '/api/doctors/a%2Fb');
   assert.equal(

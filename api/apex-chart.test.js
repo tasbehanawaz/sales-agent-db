@@ -113,6 +113,34 @@ test('charts with nothing to show or too much for one image are refused', () => 
   assert.match(draw('heatmap', grid, ['a', 'b'], ['sum_v']).error, /too many values/);
 });
 
+test('values that share a label each keep their own figure', () => {
+  const { data } = configOf(draw('bar', [
+    { a: null, sum_v: 1 },
+    { a: '', sum_v: 2 },
+    { a: 'Unknown', sum_v: 3 },
+    { a: 'x', sum_v: 4 },
+  ], ['a'], ['sum_v']));
+  assert.deepEqual(data.labels, ['Unknown', 'Unknown (2)', 'Unknown (3)', 'x']);
+  assert.deepEqual(data.datasets[0].data, [1, 2, 3, 4]);
+});
+
+test('a pie of a cut-off list is refused, because its shares would be wrong', () => {
+  const cut = reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v'], { truncated: true, groups_total: 9 });
+  assert.match(buildChart({ chartType: 'pie', title: 'T', reply: cut, limited: true }).error, /needs every group/);
+});
+
+test('a reply with nothing to plot is refused for every chart type', () => {
+  assert.match(buildChart({ chartType: 'bar', title: 'T', reply: { data: [{ a: 1 }] }, limited: false }).error, /at least 1 group_by/);
+  assert.match(draw('bar', [{ a: 'x', sum_v: 1 }], [], ['sum_v']).error, /at least 1 group_by/);
+  assert.match(draw('bar', [{ a: 'x', sum_v: null }], ['a'], ['sum_v']).error, /Every value is empty/);
+  assert.match(draw('line', [{ a: 'x', b: 'y', sum_v: null }], ['a', 'b'], ['sum_v']).error, /Every value is empty/);
+});
+
+test('week numbers read in numeric order', () => {
+  const rows = [10, 2, 1].map((w) => ({ week_of_year: w, sum_v: w }));
+  assert.deepEqual(configOf(draw('line', rows, ['week_of_year'], ['sum_v'])).data.labels, ['1', '2', '10']);
+});
+
 test('an average of a percentage carries a caveat, a sum does not', () => {
   const rows = [{ a: 'x', avg_gross_margin_pct: 0.4, sum_v: 1 }];
   assert.match(draw('bar', rows, ['a'], ['avg_gross_margin_pct']).notes[0], /count every row equally/);
