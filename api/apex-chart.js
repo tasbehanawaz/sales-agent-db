@@ -41,6 +41,26 @@ function label(value) {
   return /^\d{4}-\d{2}-\d{2}T/.test(s) ? s.slice(0, 10) : s;
 }
 
+// Different stored values can share a label (null and '' are both Unknown), and each must keep its own figure.
+function withUniqueLabels(rows, groups) {
+  const out = rows.map((r) => ({ ...r }));
+  for (const name of groups) {
+    const shown = new Map();
+    const used = new Map();
+    for (const row of out) {
+      const raw = row[name] === null ? '\u0000null' : String(row[name]);
+      if (!shown.has(raw)) {
+        const base = label(row[name]);
+        const n = (used.get(base) || 0) + 1;
+        used.set(base, n);
+        shown.set(raw, n === 1 ? base : `${base} (${n})`);
+      }
+      row[name] = shown.get(raw);
+    }
+  }
+  return out;
+}
+
 function humanize(name) {
   const words = name.replace(/_/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -51,7 +71,7 @@ function humanize(name) {
 function inOrder(column, labels) {
   const unique = [...new Set(labels)];
   const isTime = /(^|_)(month|quarter|year|date)(_id)?$/.test(column) || unique.every((l) => /^\d{4}(-\d{2}(-\d{2})?|Q[1-4])$/.test(l));
-  return isTime ? unique.sort() : unique;
+  return isTime ? unique.sort((a, b) => a.localeCompare(b, 'en', { numeric: true })) : unique;
 }
 
 // A chart does not need more than 6 significant digits, and every digit lengthens the URL.
@@ -60,9 +80,9 @@ function plotted(value) {
 }
 
 function pivot(rows, xName, seriesName, metric) {
-  const xs = inOrder(xName, rows.map((r) => label(r[xName])));
-  const names = [...new Set(rows.map((r) => label(r[seriesName])))].sort();
-  const cells = new Map(rows.map((r) => [`${label(r[xName])}\u0000${label(r[seriesName])}`, plotted(r[metric])]));
+  const xs = inOrder(xName, rows.map((r) => r[xName]));
+  const names = [...new Set(rows.map((r) => r[seriesName]))].sort();
+  const cells = new Map(rows.map((r) => [`${r[xName]}\u0000${r[seriesName]}`, plotted(r[metric])]));
   // A missing combination is a gap, not a zero.
   const series = names.map((name) => ({ name, data: xs.map((x) => cells.get(`${x}\u0000${name}`) ?? null) }));
   return { xs, series };
@@ -153,7 +173,7 @@ function heatmapConfig(chartTitle, xs, ys, cells) {
   };
 }
 
-function buildConfig(chartType, chartTitle, rows, groups, metrics) {
+function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
   const [xName, seriesName] = groups;
   if (groups.length > 2) return { error: 'A chart can show at most 2 group_by columns: the first is the x axis, the second the series.' };
 
@@ -171,11 +191,12 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics) {
 
   if (chartType === 'pie') {
     if (groups.length !== 1 || metrics.length !== 1) return { error: 'pie needs exactly 1 group_by column and 1 metric.' };
+    if (truncated) return { error: 'A pie shows shares of the whole, so it needs every group. Remove limit, or use a bar chart for a top N.' };
     if (rows.length > MAX_SLICES) return { error: `pie has ${rows.length} slices and can show ${MAX_SLICES}. Add a filter, or use limit with sort to keep the largest.` };
     const values = rows.map((r) => plotted(r[metrics[0]]));
     if (values.some((v) => v == null || v < 0)) return { error: 'pie cannot show negative or empty values. Use a bar chart.' };
     if (values.every((v) => v === 0)) return { error: `${metrics[0]} is zero for every row, so a pie has no shares to show.` };
-    return { config: pieConfig(chartTitle, rows.map((r) => label(r[xName])), values) };
+    return { config: pieConfig(chartTitle, rows.map((r) => r[xName]), values) };
   }
 
   if (groups.length === 2 && metrics.length > 1) return { error: 'With 2 group_by columns the second is the series, so use 1 metric.' };
@@ -184,12 +205,13 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics) {
   if (groups.length === 2) {
     ({ xs, series } = pivot(rows, xName, seriesName, metrics[0]));
   } else {
-    const byLabel = new Map(rows.map((r) => [label(r[xName]), r]));
-    xs = inOrder(xName, rows.map((r) => label(r[xName])));
+    const byLabel = new Map(rows.map((r) => [r[xName], r]));
+    xs = inOrder(xName, rows.map((r) => r[xName]));
     series = metrics.map((m) => ({ name: humanize(m), data: xs.map((x) => plotted(byLabel.get(x)[m])) }));
   }
   if (xs.length > MAX_CATEGORIES) return { error: `${xName} has ${xs.length} values and a chart can show ${MAX_CATEGORIES}. Add a filter, a coarser group_by, or limit with sort.` };
-  if (series.length > MAX_SERIES) return { error: `${seriesName} has ${series.length} series and a chart can show ${MAX_SERIES}. Add a filter, or swap the group_by order.` };
+  if (series.length > MAX_SERIES) return { error: `This chart has ${series.length} series and can show ${MAX_SERIES}. Use fewer metrics, add a filter, or swap the group_by order.` };
+  if (series.every((s) => s.data.every((v) => v == null))) return { error: 'Every value is empty, so there is nothing to draw.' };
   return { config: cartesian(chartType, chartTitle, xs, series) };
 }
 
@@ -201,11 +223,12 @@ function buildChart({ chartType, title: chartTitle, reply, limited }) {
   const rows = reply.data || [];
   const groups = reply.group_by || [];
   const metrics = reply.metrics || [];
+  if (!groups.length || !metrics.length) return { error: 'A chart needs at least 1 group_by column and 1 metric.' };
   if (!rows.length) return { error: 'No rows matched these filters, so there is nothing to draw.' };
   if (reply.truncated && !limited) {
     return { error: `There are ${reply.groups_total} groups, more than one chart can hold. Add a filter or use a coarser group_by.` };
   }
-  const built = buildConfig(chartType, chartTitle, rows, groups, metrics);
+  const built = buildConfig(chartType, chartTitle, withUniqueLabels(rows, groups), groups, metrics, reply.truncated);
   if (built.error) return built;
 
   const url = imageUrl(built.config);

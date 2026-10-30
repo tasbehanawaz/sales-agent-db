@@ -44,7 +44,7 @@ const APEX_CHART_GUIDE = [
   'Table, group_by, metrics, filters, from, to, sort and limit work exactly as in apex_table, which also lists where each topic lives. Call apex_tables for a table\'s columns.',
   'The first group_by column is the x axis. A second group_by column is one line or set of bars per value: use quarter,business_unit for a line per business unit.',
   'bar and line take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie takes 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
-  'For top N, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
+  'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". A pie needs every group, so it refuses a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
   'Reply: markdown holds the image to show, data holds the plotted figures, notes holds caveats to pass on.',
 ].join(' ');
@@ -122,7 +122,7 @@ function buildTools() {
       required: ['table', 'chart_type', 'title', 'group_by', 'metrics'],
       additionalProperties: { type: ['string', 'integer', 'number'] },
     },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   }, runChart);
   return tools;
 }
