@@ -231,6 +231,11 @@ test('a one-metric radar has zero at its centre', () => {
   assert.equal(configOf(draw('radar', axes, ['a'], ['v'])).options.scales.r.beginAtZero, true);
 });
 
+test('a one-metric radar refuses negative values', () => {
+  const axes = [{ a: 'x', v: -5 }, { a: 'y', v: 10 }, { a: 'z', v: 20 }];
+  assert.match(draw('radar', axes, ['a'], ['v']).error, /cannot show negative/);
+});
+
 test('a value exactly on a bin edge goes in the bin that starts there', () => {
   // The bins are 0.2 wide, and 0.2 * 3 is slightly above 0.6 in floating point.
   const rows = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].map((v, i) => ({ a: `c${i}`, v }));

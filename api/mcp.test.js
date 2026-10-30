@@ -72,6 +72,9 @@ test('apex_chart asks the route for totals only and reports its answers', async 
     assert.equal(empty.isError, true, 'a chart that cannot be drawn is an error');
     assert.match(empty.text, /No rows matched/);
 
+    const blankSort = JSON.parse((await call({ chart_type: 'waterfall', sort: ' ' })).text);
+    assert.equal(blankSort.success, true, 'a blank sort is treated as no sort');
+
     const top = await call({ limit: 1, sort: '-sum_v' });
     assert.match(JSON.parse(top.text).notes[0], /1 of 5/, 'limit allows a cut-off list and discloses it');
   } finally {

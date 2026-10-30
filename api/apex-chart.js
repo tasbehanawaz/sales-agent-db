@@ -432,6 +432,8 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated, so
     if (xs.length > MAX_RADAR_AXES) return { error: `radar has ${xs.length} axes and can show ${MAX_RADAR_AXES}. Add a filter or use a coarser group_by.` };
     if (series.length > MAX_RADAR_SERIES) return { error: `radar has ${series.length} shapes and can show ${MAX_RADAR_SERIES}. Add a filter, or swap the group_by order.` };
     if (series.every((s) => s.data.every((v) => v == null))) return { error: 'Every value is empty, so there is nothing to draw.' };
+    // The lowest value would become the centre, so the shape would no longer show the amounts.
+    if (series.some((s) => s.data.some((v) => v < 0))) return { error: 'radar cannot show negative values. Use a bar chart.' };
     return { config: radarConfig(chartTitle, xs, series, false) };
   }
 
