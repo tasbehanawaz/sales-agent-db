@@ -67,6 +67,11 @@ Send the API key as `x-api-key`.
   instead of ignored. On tables keyed by `month_id`, `date_id` or `quarter_id`, `from`/`to` cover whole months, days
   or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
+- `apex_chart` draws those totals as a `bar`, `line`, `pie` or `heatmap` image. It takes `apex_table`'s arguments plus `chart_type` and `title`;
+  the first `group_by` column is the x axis and a second is the series (or the heatmap's y axis). The reply has `markdown` (the image), `data` (the
+  plotted figures) and `notes` (caveats). A chart that can't be drawn as asked is refused with the change that would fix it.
+  Images are drawn by quickchart.io, so the plotted figures are sent there inside the image URL.
+  `{"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
 - `run_many` runs up to 10 tools in parallel in one call: `{"calls":[{"tool":"apex_customer_risk","arguments":{"limit":10}},{"tool":"sales_insights"}]}`.
   The reply is `{"results":[{"tool","isError","result"}]}` in call order, each `result` being that tool's normal reply. Each call

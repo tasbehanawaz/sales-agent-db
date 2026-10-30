@@ -26,6 +26,18 @@ test('arguments are checked against the endpoint schema', () => {
   assert.equal(table({ table: 'action-catalog', region: 'North' }), true, 'per-table filters pass through');
 });
 
+test('apex_chart requires what a chart needs and passes table filters through', () => {
+  const chart = TOOLS.get('apex_chart').validate;
+  const args = { table: 'action-catalog', chart_type: 'bar', title: 'T', group_by: 'function', metrics: 'count' };
+  assert.equal(chart(args), true);
+  assert.equal(chart({ ...args, region: 'North' }), true, 'per-table filters pass through');
+  assert.equal(chart({ ...args, chart_type: 'sankey' }), false);
+  for (const missing of ['chart_type', 'title', 'group_by', 'metrics']) {
+    const { [missing]: _, ...rest } = args;
+    assert.equal(chart(rest), false, `missing ${missing}`);
+  }
+});
+
 test('requestPath fills path params and encodes the query', () => {
   assert.equal(requestPath('/api/doctors/{id}', { id: 'a/b' }), '/api/doctors/a%2Fb');
   assert.equal(
