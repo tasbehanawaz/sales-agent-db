@@ -168,7 +168,7 @@ test('scatter and bubble plot one point per group, and bubble area follows the t
   const scatter = configOf(draw('scatter', rows, ['a'], ['m1', 'm2'])).data.datasets[0].data;
   assert.deepEqual(scatter, [{ x: 1, y: 2, l: 'x' }, { x: 3, y: 4, l: 'y' }], 'a point missing a value is left out');
   const bubble = configOf(draw('bubble', rows, ['a'], ['m1', 'm2', 'm3'])).data.datasets[0].data;
-  assert.deepEqual(bubble.map((p) => p.r), [20, 12], 'the radius is proportional to the square root');
+  assert.deepEqual(bubble.map((p) => p.r), [20, 10], 'the radius is proportional to the square root');
 });
 
 test('radar scales mixed metrics per axis and says so, but plots one metric as stored', () => {
@@ -177,6 +177,9 @@ test('radar scales mixed metrics per axis and says so, but plots one metric as s
   assert.deepEqual(configOf(scaled).data.datasets.map((d) => d.data), [[100, 50, 100], [50, 100, 50]]);
   assert.match(scaled.notes[0], /scaled/);
   assert.deepEqual(scaled.data, rows.map((r) => r), 'data keeps the real figures');
+  assert.match(draw('radar', [{ a: 'x', m1: 1, m2: 1, m3: 1 }], ['a'], ['m1', 'm2', 'm3']).error, /at least 2/);
+  assert.match(draw('radar', [rows[0], { ...rows[1], m2: null }], ['a'], ['m1', 'm2', 'm3']).error, /negative or empty/);
+  assert.match(draw('radar', [rows[0], { ...rows[1], m2: -1 }], ['a'], ['m1', 'm2', 'm3']).error, /negative or empty/);
 
   const axes = [{ a: 'x', v: 1 }, { a: 'y', v: 2 }, { a: 'z', v: 3 }];
   assert.deepEqual(configOf(draw('radar', axes, ['a'], ['v'])).data.datasets[0].data, [1, 2, 3]);
@@ -199,9 +202,41 @@ test('waterfall bars start where the last ended and finish on a total', () => {
   assert.deepEqual(data.datasets[0].data, [[0, 10], [10, 6], [6, 7], [0, 7]]);
 });
 
+test('a waterfall total equals the sum of its data, with small steps after large ones intact', () => {
+  const rows = [{ a: 'p', v: 123456.7 }, { a: 'q', v: 0.4 }, { a: 'r', v: 0.4 }, { a: 's', v: 0.4 }];
+  const chart = draw('waterfall', rows, ['a'], ['v']);
+  const bars = configOf(chart).data.datasets[0].data;
+  assert.equal(bars.at(-1)[1], 123457.9);
+  assert.ok(bars[2][1] > bars[2][0], 'a small step keeps its height');
+  assert.deepEqual(chart.data.at(-1), { a: 'Total', v: 123457.9 }, 'the agent can quote the total');
+  assert.deepEqual(configOf(draw('waterfall', [{ month: '2026-02', v: 1 }, { month: '2026-01', v: 2 }], ['month'], ['v'])).data.labels, ['2026-01', '2026-02', 'Total']);
+});
+
+test('bars start at zero by default, however close the values are', () => {
+  for (const chartType of ['bar', 'horizontal_bar', 'stacked_bar']) {
+    const { options } = configOf(draw(chartType, [{ a: 'x', v: 100 }, { a: 'y', v: 101 }], ['a'], ['v']));
+    assert.notEqual(options.scales[chartType === 'horizontal_bar' ? 'x' : 'y'].beginAtZero, false, chartType);
+  }
+});
+
+test('narrow histogram bins keep distinct labels, and empty values are disclosed', () => {
+  const rows = Array.from({ length: 16 }, (_, i) => ({ a: `c${i}`, v: 5000000 + i }));
+  const chart = draw('histogram', [...rows, { a: 'none', v: null }], ['a'], ['v']);
+  assert.equal(new Set(chart.data.map((b) => b.range)).size, chart.data.length);
+  assert.match(chart.notes[1], /Left out 1 groups/);
+});
+
+test('points missing a value are disclosed and a negative bubble size is refused', () => {
+  const rows = [{ a: 'x', m1: 1, m2: 2, m3: 3 }, { a: 'z', m1: null, m2: 4, m3: 1 }];
+  const chart = draw('scatter', rows, ['a'], ['m1', 'm2']);
+  assert.match(chart.notes[0], /Left out 1 groups/);
+  assert.deepEqual(chart.data.map((r) => r.a), ['x'], 'data matches what is drawn');
+  assert.match(draw('bubble', [{ a: 'x', m1: 1, m2: 2, m3: -3 }], ['a'], ['m1', 'm2', 'm3']).error, /cannot be negative/);
+});
+
 test('charts that would be wrong without every group refuse a cut-off list', () => {
   const cut = reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v'], { truncated: true, groups_total: 9 });
-  for (const chartType of ['pie', 'donut', 'histogram', 'waterfall']) {
+  for (const chartType of ['pie', 'donut', 'stacked_bar', 'histogram', 'waterfall']) {
     assert.match(buildChart({ chartType, title: 'T', reply: cut, limited: true }).error, /needs every group/, chartType);
   }
 });

@@ -5,7 +5,7 @@ const { randomUUID } = require('crypto');
 const PALETTE = ['#4C78A8', '#F58518', '#54A24B', '#E45756', '#72B7B2', '#B279A2', '#FF9DA6', '#9D755D', '#BAB0AC', '#EECA3B', '#3B7A57', '#8E6C8A'];
 const CHART_TYPES = ['bar', 'horizontal_bar', 'stacked_bar', 'line', 'area', 'combo', 'pie', 'donut', 'heatmap', 'scatter', 'bubble', 'radar', 'histogram', 'waterfall'];
 // Shares, distributions and running totals are wrong unless every group is present.
-const NEEDS_EVERY_GROUP = ['pie', 'donut', 'histogram', 'waterfall'];
+const NEEDS_EVERY_GROUP = ['pie', 'donut', 'stacked_bar', 'histogram', 'waterfall'];
 // Past these a chart stops being readable, so the agent is told to narrow it instead of getting a cut-off chart.
 const MAX_CATEGORIES = 40;
 const MAX_SERIES = PALETTE.length;
@@ -116,7 +116,7 @@ function cartesian(kind, chartTitle, xs, series) {
   const horizontal = kind === 'horizontal_bar';
   const stacked = kind === 'stacked_bar';
   // A filled area reads as an amount, so its axis has to start at zero.
-  const valueAxis = { stacked, beginAtZero: kind === 'area', ticks: { callback: formatValue } };
+  const valueAxis = { stacked, ...(kind === 'area' && { beginAtZero: true }), ticks: { callback: formatValue } };
   const categoryAxis = { stacked, grid: { display: false }, ticks: horizontal ? { autoSkip: false } : { maxRotation: 40, minRotation: 0, autoSkip: true } };
   return {
     type: isLine ? 'line' : 'bar',
@@ -200,8 +200,12 @@ function radarConfig(chartTitle, axes, series, scaled) {
   };
 }
 
-function compact(v) {
-  return Math.abs(v) >= 1e6 ? `${+(v / 1e6).toFixed(1)}m` : (+v.toFixed(3)).toLocaleString('en');
+// Enough decimals for the bin width, so narrow bins never share a label.
+function rangeEnd(v, largest, width) {
+  const scale = largest >= 1e6 ? 1e6 : 1;
+  const decimals = Math.min(10, Math.max(0, Math.ceil(-Math.log10(width / scale)) + 1));
+  const text = (v / scale).toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return scale === 1e6 ? `${text}m` : text;
 }
 
 function histogramBins(values) {
@@ -209,9 +213,15 @@ function histogramBins(values) {
   const max = Math.max(...values);
   const count = min === max ? 1 : Math.min(MAX_HISTOGRAM_BINS, Math.ceil(Math.log2(values.length)) + 1);
   const width = (max - min) / count || 1;
-  const bins = Array.from({ length: count }, (_, i) => ({ range: `${compact(min + i * width)} to ${compact(min + (i + 1) * width)}`, count: 0 }));
-  // The last bin includes the maximum.
-  for (const v of values) bins[Math.min(count - 1, Math.floor((v - min) / width))].count += 1;
+  const largest = Math.max(Math.abs(min), Math.abs(max));
+  const edges = Array.from({ length: count + 1 }, (_, i) => min + i * width);
+  const bins = edges.slice(0, count).map((edge, i) => ({ range: `${rangeEnd(edge, largest, width)} to ${rangeEnd(edges[i + 1], largest, width)}`, count: 0 }));
+  // A value on an edge goes in the bin that starts there, and the last bin includes the maximum.
+  for (const v of values) {
+    let i = count - 1;
+    while (i > 0 && v < edges[i]) i -= 1;
+    bins[i].count += 1;
+  }
   return bins;
 }
 
@@ -233,19 +243,24 @@ function histogramConfig(chartTitle, bins, metric) {
   };
 }
 
+// Running totals are never rounded along the way, or the error would build up. This only removes float noise.
+function exact(v) {
+  return Number(v.toPrecision(12));
+}
+
 function waterfallConfig(chartTitle, xs, values) {
   let running = 0;
   const bars = values.map((v) => {
     const start = running;
-    running = plotted(running + v);
-    return [start, running];
+    running += v;
+    return [exact(start), exact(running)];
   });
   return {
     type: 'bar',
     data: {
       labels: [...xs, 'Total'],
       datasets: [{
-        data: [...bars, [0, running]],
+        data: [...bars, [0, exact(running)]],
         backgroundColor: [...values.map((v) => (v < 0 ? NEGATIVE : POSITIVE)), PALETTE[0]],
         maxBarThickness: 56,
       }],
@@ -311,6 +326,10 @@ function heatmapConfig(chartTitle, xs, ys, cells) {
   };
 }
 
+function leftOut(count) {
+  return count ? [`Left out ${count} groups with an empty value.`] : [];
+}
+
 function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
   const [xName, seriesName] = groups;
   if (truncated && NEEDS_EVERY_GROUP.includes(chartType)) {
@@ -320,10 +339,14 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
   // Each row is one value, so any number of group_by columns can define what a row is.
   if (chartType === 'histogram') {
     if (metrics.length !== 1) return { error: 'histogram needs exactly 1 metric. group_by sets what is counted: use customer_id to count customers in each range.' };
-    const values = rows.map((r) => plotted(r[metrics[0]])).filter((v) => v != null);
+    const values = rows.map((r) => r[metrics[0]]).filter((v) => v != null).map(Number);
     if (!values.length) return { error: 'Every value is empty, so there is nothing to draw.' };
     const bins = histogramBins(values);
-    return { config: histogramConfig(chartTitle, bins, metrics[0]), data: bins, notes: [`Counts ${values.length} groups, one per ${groups.join(' and ')}.`] };
+    return {
+      config: histogramConfig(chartTitle, bins, metrics[0]),
+      data: bins,
+      notes: [`Counts ${values.length} groups, one per ${groups.join(' and ')}.`, ...leftOut(rows.length - values.length)],
+    };
   }
 
   if (groups.length > 2) return { error: 'A chart can show at most 2 group_by columns: the first is the x axis, the second the series.' };
@@ -344,8 +367,8 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
     if (groups.length !== 1 || metrics.length !== 1) return { error: `${chartType} needs exactly 1 group_by column and 1 metric.` };
     if (rows.length > MAX_SLICES) return { error: `${chartType} has ${rows.length} slices and can show ${MAX_SLICES}. Add a filter or use a coarser group_by.` };
     const values = rows.map((r) => plotted(r[metrics[0]]));
-    if (values.some((v) => v == null || v < 0)) return { error: 'pie cannot show negative or empty values. Use a bar chart.' };
-    if (values.every((v) => v === 0)) return { error: `${metrics[0]} is zero for every row, so a pie has no shares to show.` };
+    if (values.some((v) => v == null || v < 0)) return { error: `${chartType} cannot show negative or empty values. Use a bar chart.` };
+    if (values.every((v) => v === 0)) return { error: `${metrics[0]} is zero for every row, so a ${chartType} has no shares to show.` };
     return { config: pieConfig(chartType === 'pie' ? 'pie' : 'doughnut', chartTitle, rows.map((r) => r[xName]), values) };
   }
 
@@ -358,18 +381,20 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
     const present = rows.filter((r) => metrics.every((m) => r[m] != null));
     if (!present.length) return { error: 'No group has a value for every metric, so there is nothing to draw.' };
     if (present.length > MAX_POINTS) return { error: `This chart has ${present.length} points and can show ${MAX_POINTS}. Add a filter, a coarser group_by, or limit with sort.` };
-    const sizes = sizeMetric ? present.map((r) => Math.abs(Number(r[sizeMetric]))) : [];
+    const sizes = sizeMetric ? present.map((r) => Number(r[sizeMetric])) : [];
+    if (sizes.some((v) => v < 0)) return { error: 'bubble size cannot be negative. Use a metric with no negative values as the third metric.' };
     const largest = Math.max(...sizes, 0) || 1;
     const points = present.map((r, i) => ({
       x: plotted(r[xMetric]),
       y: plotted(r[yMetric]),
       l: r[xName],
-      // Area, not radius, carries the value.
-      ...(sizeMetric && { r: Math.round(3 + 17 * Math.sqrt(sizes[i] / largest)) }),
+      // Area, not radius, carries the value. The floor keeps the smallest bubbles visible.
+      ...(sizeMetric && { r: Math.max(2, Math.round(20 * Math.sqrt(sizes[i] / largest))) }),
     }));
     return {
       config: pointsConfig(chartType, chartTitle, points, humanize(xMetric), humanize(yMetric)),
-      notes: sizeMetric ? [`Bubble area shows ${humanize(sizeMetric)}.`] : [],
+      data: present,
+      notes: [...(sizeMetric ? [`Bubble area shows ${humanize(sizeMetric)}.`] : []), ...leftOut(rows.length - present.length)],
     };
   }
 
@@ -378,10 +403,14 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
       if (groups.length !== 1) return { error: 'radar with several metrics takes 1 group_by column: one shape per value, one axis per metric.' };
       if (metrics.length > MAX_RADAR_AXES) return { error: `radar can show ${MAX_RADAR_AXES} axes. Use fewer metrics.` };
       if (rows.length > MAX_RADAR_SERIES) return { error: `radar has ${rows.length} shapes and can show ${MAX_RADAR_SERIES}. Add a filter or use a coarser group_by.` };
+      if (rows.length < 2) return { error: 'radar with several metrics compares groups, so it needs at least 2. Use a bar chart for one group.' };
+      if (rows.some((r) => metrics.some((m) => r[m] == null || Number(r[m]) < 0))) {
+        return { error: 'radar with several metrics cannot show negative or empty values. Use a bar chart.' };
+      }
       // Metrics have different units, so each axis is scaled to its own highest value.
-      const highest = metrics.map((m) => Math.max(...rows.map((r) => Number(r[m]) || 0)));
-      if (highest.some((h) => h <= 0)) return { error: 'radar with several metrics needs a positive value on every axis. Use bars for negative or empty metrics.' };
-      const series = rows.map((r) => ({ name: r[xName], data: metrics.map((m, i) => plotted(((Number(r[m]) || 0) / highest[i]) * 100)) }));
+      const highest = metrics.map((m) => Math.max(...rows.map((r) => Number(r[m]))));
+      if (highest.some((h) => h === 0)) return { error: 'One of these metrics is zero for every group, so radar has no scale for its axis. Use a bar chart.' };
+      const series = rows.map((r) => ({ name: r[xName], data: metrics.map((m, i) => plotted((Number(r[m]) / highest[i]) * 100)) }));
       return {
         config: radarConfig(chartTitle, metrics.map(humanize), series, true),
         notes: ['Each axis is scaled so its highest value is 100. Quote real figures from data, not the scaled ones on the chart.'],
@@ -400,11 +429,14 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
 
   if (chartType === 'waterfall') {
     if (groups.length !== 1) return { error: 'waterfall needs exactly 1 group_by column, with 1 metric to plot. Set the bar order with sort.' };
-    const values = rows.map((r) => plotted(r[metrics[0]]));
-    if (values.some((v) => v == null)) return { error: 'waterfall cannot show empty values. Add a filter to remove them.' };
-    if (values.length > MAX_CATEGORIES) return { error: `waterfall has ${values.length} bars and can show ${MAX_CATEGORIES}. Add a filter or use a coarser group_by.` };
+    if (rows.some((r) => r[metrics[0]] == null)) return { error: 'waterfall cannot show empty values. Add a filter to remove them.' };
+    if (rows.length > MAX_CATEGORIES) return { error: `waterfall has ${rows.length} bars and can show ${MAX_CATEGORIES}. Add a filter or use a coarser group_by.` };
+    const byLabel = new Map(rows.map((r) => [r[xName], r]));
+    const xs = inOrder(xName, rows.map((r) => r[xName]));
+    const values = xs.map((x) => Number(byLabel.get(x)[metrics[0]]));
     return {
-      config: waterfallConfig(chartTitle, rows.map((r) => r[xName]), values),
+      config: waterfallConfig(chartTitle, xs, values),
+      data: [...rows, { [xName]: 'Total', [metrics[0]]: exact(values.reduce((a, b) => a + b, 0)) }],
       notes: ['Bars add up in the order shown, and Total is their sum. Only the first metric is plotted, so a second can set the order through sort.'],
     };
   }
