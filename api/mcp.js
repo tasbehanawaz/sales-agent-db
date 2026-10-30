@@ -10,6 +10,7 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { swaggerSpec } = require('./swagger');
 const { TABLES: APEX_TABLES } = require('./apex-table-routes');
+const { CHART_TYPES, buildChart } = require('./apex-chart');
 const { name, version } = require('./package.json');
 
 const APEX_TABLE_PREFIX = '/api/apex/tables/';
@@ -38,6 +39,15 @@ const APEX_TABLE_GUIDE = [
   'KPI definitions: meta-kpi-definition. Prediction models and runs: meta-model-registry. Monthly driver indices: meta-latent-drivers-monthly.',
   'Call apex_tables for each table\'s filters, group_by columns and numeric measures.',
 ].join(' ');
+const APEX_CHART_GUIDE = [
+  'Draw a chart of any Apex Group table, for any measure, breakdown, date range and filter. Use it whenever the user asks to see a chart, graph, trend or visual.',
+  'Table, group_by, metrics, filters, from, to, sort and limit work exactly as in apex_table, which also lists where each topic lives. Call apex_tables for a table\'s columns.',
+  'The first group_by column is the x axis. A second group_by column is one line or set of bars per value: use quarter,business_unit for a line per business unit.',
+  'bar and line take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie takes 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
+  'For top N, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
+  'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
+  'Reply: markdown holds the image to show, data holds the plotted figures, notes holds caveats to pass on.',
+].join(' ');
 const LOOPBACK_TIMEOUT_MS = 120000;
 
 // Workflow variables often arrive as strings, so "5" is accepted where an integer is declared.
@@ -57,9 +67,9 @@ function inputSchema(parameters = []) {
 // return a download_url), and the 48 per-table Apex endpoints collapse into apex_table.
 function buildTools() {
   const tools = new Map();
-  const add = (name, route, definition) => {
+  const add = (name, route, definition, run = runEndpoint) => {
     if (tools.has(name)) throw new Error(`Duplicate MCP tool name ${name} (${tools.get(name).route} and ${route})`);
-    tools.set(name, { route, definition, validate: ajv.compile(definition.inputSchema) });
+    tools.set(name, { route, definition, validate: ajv.compile(definition.inputSchema), run });
   };
   for (const [route, ops] of Object.entries(swaggerSpec.paths)) {
     const op = ops.get;
@@ -92,6 +102,28 @@ function buildTools() {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
   });
+  add('apex_chart', `${APEX_TABLE_PREFIX}{table}`, {
+    name: 'apex_chart',
+    title: 'Draw a chart of an Apex table',
+    description: APEX_CHART_GUIDE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        table: { type: 'string', enum: Object.keys(APEX_TABLES) },
+        chart_type: { type: 'string', enum: CHART_TYPES },
+        title: { type: 'string', minLength: 1, description: 'Chart title, naming the measure, breakdown and period' },
+        group_by: { type: 'string', description: 'Comma-separated columns: x axis first, then the optional series or heatmap y axis' },
+        metrics: { type: 'string', description: 'Comma-separated totals: count, distinct:<column>, sum|avg|min|max:<numeric column>' },
+        from: { type: 'string', format: 'date', description: 'Start date (YYYY-MM-DD), for tables with a date column' },
+        to: { type: 'string', format: 'date', description: 'End date (YYYY-MM-DD), for tables with a date column' },
+        sort: { type: 'string', description: 'Group or metric name to sort by, - prefix for descending, e.g. -sum_revenue' },
+        limit: { type: 'integer', minimum: 1, description: 'Keep only the first groups by sort, for a top N chart' },
+      },
+      required: ['table', 'chart_type', 'title', 'group_by', 'metrics'],
+      additionalProperties: { type: ['string', 'integer', 'number'] },
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, runChart);
   return tools;
 }
 
@@ -143,8 +175,19 @@ async function callTool(name, rawArgs, ctx) {
     const problems = tool.validate.errors.map((e) => `${e.instancePath || 'arguments'} ${e.message}`).join('; ');
     return { isError: true, text: `Invalid arguments for ${name}: ${problems}` };
   }
+  return tool.run(tool, args, ctx);
+}
+
+async function runEndpoint(tool, args, ctx) {
   const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, args) });
   return { isError: status >= 400, text: body };
+}
+
+async function runChart(tool, { chart_type: chartType, title, ...query }, ctx) {
+  const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, query) });
+  if (status >= 400) return { isError: true, text: body };
+  const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null });
+  return { isError: Boolean(chart.error), text: chart.error || JSON.stringify(chart) };
 }
 
 // One model step instead of one per tool: an agent that needs several figures asks for all of them at once,
