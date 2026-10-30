@@ -195,7 +195,8 @@ function radarConfig(chartTitle, axes, series, scaled) {
     },
     options: {
       plugins: { title: title(chartTitle), legend: { display: series.length > 1, position: 'bottom' }, datalabels: { display: false } },
-      scales: { r: { ...(scaled && { min: 0, max: 100 }), ticks: { callback: formatValue } } },
+      // A filled shape reads as an amount, so its centre has to be zero.
+      scales: { r: { ...(scaled ? { min: 0, max: 100 } : { beginAtZero: true }), ticks: { callback: formatValue } } },
     },
   };
 }
@@ -217,9 +218,11 @@ function histogramBins(values) {
   const edges = Array.from({ length: count + 1 }, (_, i) => min + i * width);
   const bins = edges.slice(0, count).map((edge, i) => ({ range: `${rangeEnd(edge, largest, width)} to ${rangeEnd(edges[i + 1], largest, width)}`, count: 0 }));
   // A value on an edge goes in the bin that starts there, and the last bin includes the maximum.
+  // The tolerance absorbs float error in the edges: 0.1 * 3 is not exactly 0.3.
+  const tolerance = width * 1e-9;
   for (const v of values) {
     let i = count - 1;
-    while (i > 0 && v < edges[i]) i -= 1;
+    while (i > 0 && v < edges[i] - tolerance) i -= 1;
     bins[i].count += 1;
   }
   return bins;
@@ -243,9 +246,10 @@ function histogramConfig(chartTitle, bins, metric) {
   };
 }
 
-// Running totals are never rounded along the way, or the error would build up. This only removes float noise.
+// Running totals are never rounded along the way, or the error would build up. Totals from the API
+// have 4 decimals at most, so 6 only removes float noise, including what is left when steps cancel out.
 function exact(v) {
-  return Number(v.toPrecision(12));
+  return Number(v.toFixed(6));
 }
 
 function waterfallConfig(chartTitle, xs, values) {
@@ -326,11 +330,15 @@ function heatmapConfig(chartTitle, xs, ys, cells) {
   };
 }
 
-function leftOut(count) {
-  return count ? [`Left out ${count} groups with an empty value.`] : [];
+function groupCount(count) {
+  return `${count} ${count === 1 ? 'group' : 'groups'}`;
 }
 
-function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
+function leftOut(count) {
+  return count ? [`Left out ${groupCount(count)} with an empty value.`] : [];
+}
+
+function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated, sorted) {
   const [xName, seriesName] = groups;
   if (truncated && NEEDS_EVERY_GROUP.includes(chartType)) {
     return { error: `A ${chartType} chart needs every group to be correct. Remove limit, or use a bar chart for a top N.` };
@@ -345,7 +353,7 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
     return {
       config: histogramConfig(chartTitle, bins, metrics[0]),
       data: bins,
-      notes: [`Counts ${values.length} groups, one per ${groups.join(' and ')}.`, ...leftOut(rows.length - values.length)],
+      notes: [`Counts ${groupCount(values.length)}, one per ${groups.join(' and ')}.`, ...leftOut(rows.length - values.length)],
     };
   }
 
@@ -432,11 +440,12 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
     if (rows.some((r) => r[metrics[0]] == null)) return { error: 'waterfall cannot show empty values. Add a filter to remove them.' };
     if (rows.length > MAX_CATEGORIES) return { error: `waterfall has ${rows.length} bars and can show ${MAX_CATEGORIES}. Add a filter or use a coarser group_by.` };
     const byLabel = new Map(rows.map((r) => [r[xName], r]));
-    const xs = inOrder(xName, rows.map((r) => r[xName]));
+    // An explicit sort is the order the agent asked for; without one, time still reads left to right.
+    const xs = sorted ? rows.map((r) => r[xName]) : inOrder(xName, rows.map((r) => r[xName]));
     const values = xs.map((x) => Number(byLabel.get(x)[metrics[0]]));
     return {
       config: waterfallConfig(chartTitle, xs, values),
-      data: [...rows, { [xName]: 'Total', [metrics[0]]: exact(values.reduce((a, b) => a + b, 0)) }],
+      data: [...xs.map((x) => byLabel.get(x)), { [xName]: 'Total', [metrics[0]]: exact(values.reduce((a, b) => a + b, 0)) }],
       notes: ['Bars add up in the order shown, and Total is their sum. Only the first metric is plotted, so a second can set the order through sort.'],
     };
   }
@@ -468,7 +477,7 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics, truncated) {
  * Build the apex_chart reply from an apex_table totals reply. Returns { error } when the
  * totals cannot be drawn as asked, with the change that would fix it.
  */
-function buildChart({ chartType, title: chartTitle, reply, limited }) {
+function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
   const rows = reply.data || [];
   const groups = reply.group_by || [];
   const metrics = reply.metrics || [];
@@ -477,7 +486,7 @@ function buildChart({ chartType, title: chartTitle, reply, limited }) {
   if (reply.truncated && !limited) {
     return { error: `There are ${reply.groups_total} groups, more than one chart can hold. Add a filter or use a coarser group_by.` };
   }
-  const built = buildConfig(chartType, chartTitle, withUniqueLabels(rows, groups), groups, metrics, reply.truncated);
+  const built = buildConfig(chartType, chartTitle, withUniqueLabels(rows, groups), groups, metrics, reply.truncated, sorted);
   if (built.error) return built;
 
   const url = imageUrl(built.config);

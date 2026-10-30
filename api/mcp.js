@@ -189,7 +189,7 @@ async function runEndpoint(tool, args, ctx) {
 async function runChart(tool, { chart_type: chartType, title, ...query }, ctx) {
   const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, query) });
   if (status >= 400) return { isError: true, text: body };
-  const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null });
+  const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null, sorted: query.sort != null });
   return { isError: Boolean(chart.error), text: chart.error || JSON.stringify(chart) };
 }
 

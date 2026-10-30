@@ -212,6 +212,32 @@ test('a waterfall total equals the sum of its data, with small steps after large
   assert.deepEqual(configOf(draw('waterfall', [{ month: '2026-02', v: 1 }, { month: '2026-01', v: 2 }], ['month'], ['v'])).data.labels, ['2026-01', '2026-02', 'Total']);
 });
 
+test('steps that cancel out give a total of exactly zero', () => {
+  const chart = draw('waterfall', [{ a: 'p', v: 0.1 }, { a: 'q', v: 0.2 }, { a: 'r', v: -0.3 }], ['a'], ['v']);
+  assert.equal(chart.data.at(-1).v, 0);
+  assert.deepEqual(configOf(chart).data.datasets[0].data.at(-1), [0, 0]);
+});
+
+test('a waterfall follows an explicit sort, and data is in drawn order', () => {
+  const rows = [{ month: '2026-02', v: 1 }, { month: '2026-01', v: 2 }];
+  const sorted = buildChart({ chartType: 'waterfall', title: 'T', reply: reply(rows, ['month'], ['v']), limited: false, sorted: true });
+  assert.deepEqual(configOf(sorted).data.labels, ['2026-02', '2026-01', 'Total']);
+  const unsorted = draw('waterfall', rows, ['month'], ['v']);
+  assert.deepEqual(unsorted.data.map((r) => r.month), ['2026-01', '2026-02', 'Total']);
+});
+
+test('a one-metric radar has zero at its centre', () => {
+  const axes = [{ a: 'x', v: 100 }, { a: 'y', v: 101 }, { a: 'z', v: 102 }];
+  assert.equal(configOf(draw('radar', axes, ['a'], ['v'])).options.scales.r.beginAtZero, true);
+});
+
+test('a value exactly on a bin edge goes in the bin that starts there', () => {
+  // The bins are 0.2 wide, and 0.2 * 3 is slightly above 0.6 in floating point.
+  const rows = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].map((v, i) => ({ a: `c${i}`, v }));
+  const { data } = draw('histogram', rows, ['a'], ['v']);
+  assert.deepEqual(data.map((b) => b.count), [2, 2, 2, 2, 3]);
+});
+
 test('bars start at zero by default, however close the values are', () => {
   for (const chartType of ['bar', 'horizontal_bar', 'stacked_bar']) {
     const { options } = configOf(draw(chartType, [{ a: 'x', v: 100 }, { a: 'y', v: 101 }], ['a'], ['v']));
@@ -223,13 +249,13 @@ test('narrow histogram bins keep distinct labels, and empty values are disclosed
   const rows = Array.from({ length: 16 }, (_, i) => ({ a: `c${i}`, v: 5000000 + i }));
   const chart = draw('histogram', [...rows, { a: 'none', v: null }], ['a'], ['v']);
   assert.equal(new Set(chart.data.map((b) => b.range)).size, chart.data.length);
-  assert.match(chart.notes[1], /Left out 1 groups/);
+  assert.match(chart.notes[1], /Left out 1 group with/);
 });
 
 test('points missing a value are disclosed and a negative bubble size is refused', () => {
   const rows = [{ a: 'x', m1: 1, m2: 2, m3: 3 }, { a: 'z', m1: null, m2: 4, m3: 1 }];
   const chart = draw('scatter', rows, ['a'], ['m1', 'm2']);
-  assert.match(chart.notes[0], /Left out 1 groups/);
+  assert.match(chart.notes[0], /Left out 1 group with/);
   assert.deepEqual(chart.data.map((r) => r.a), ['x'], 'data matches what is drawn');
   assert.match(draw('bubble', [{ a: 'x', m1: 1, m2: 2, m3: -3 }], ['a'], ['m1', 'm2', 'm3']).error, /cannot be negative/);
 });
