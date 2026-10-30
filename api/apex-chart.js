@@ -1,5 +1,7 @@
 // Turns one apex_table totals reply into a QuickChart image. The numbers always come from the
 // API reply, never from the model, and the first group_by column is the chart's x axis.
+const { randomUUID } = require('crypto');
+
 const PALETTE = ['#4C78A8', '#F58518', '#54A24B', '#E45756', '#72B7B2', '#B279A2', '#FF9DA6', '#9D755D', '#BAB0AC', '#EECA3B', '#3B7A57', '#8E6C8A'];
 const CHART_TYPES = ['bar', 'line', 'pie', 'heatmap'];
 // Past these a chart stops being readable, so the agent is told to narrow it instead of getting a cut-off chart.
@@ -9,6 +11,9 @@ const MAX_SLICES = 12;
 const BAR_LABEL_LIMIT = 15;
 const WIDTH = 900;
 const HEIGHT = 500;
+// QuickChart accepted 64,000 characters and refused 128,000, but the agent has to copy the URL into its
+// reply. The current Vertx heatmap works at about 12,300, so this stays near what is known to work.
+const MAX_URL_LENGTH = 16000;
 
 // These run inside QuickChart, so they cannot use anything from this file or contain a double quote.
 const formatValue = (v) => (v == null ? '' : Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString());
@@ -16,9 +21,12 @@ const heatLabel = (p) => { const v = p.v; return Math.abs(v) >= 1e6 ? +(v / 1e6)
 const heatLabelColor = (c) => (c.dataset.data[c.dataIndex].d ? '#ffffff' : '#102033');
 const pieLabel = (v, c) => { const total = c.dataset.data.reduce((a, b) => a + b, 0); const n = Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString(); return n + ' (' + Math.round((v / total) * 100) + '%)'; };
 
+// Titles and labels are not trusted, so only a random per-call marker can turn a string into code.
 function serialize(config) {
-  const json = JSON.stringify(config, (_, v) => (typeof v === 'function' ? `__JS__${v}__JS__` : v));
-  return json.replace(/"__JS__(.*?)__JS__"/g, '$1');
+  const nonce = randomUUID();
+  const functions = [];
+  const json = JSON.stringify(config, (_, v) => (typeof v === 'function' ? `${nonce}:${functions.push(String(v)) - 1}` : v));
+  return json.replace(new RegExp(`"${nonce}:(\\d+)"`, 'g'), (_, i) => functions[i]);
 }
 
 function imageUrl(config) {
@@ -157,6 +165,7 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics) {
     }
     const ys = series.map((s) => s.name);
     const cells = series.flatMap((s) => s.data.map((v, i) => ({ x: xs[i], y: s.name, v })).filter((c) => c.v != null));
+    if (!cells.length) return { error: `${metrics[0]} is empty for every row, so there is nothing to draw.` };
     return { config: heatmapConfig(chartTitle, xs, ys, cells) };
   }
 
@@ -165,6 +174,7 @@ function buildConfig(chartType, chartTitle, rows, groups, metrics) {
     if (rows.length > MAX_SLICES) return { error: `pie has ${rows.length} slices and can show ${MAX_SLICES}. Add a filter, or use limit with sort to keep the largest.` };
     const values = rows.map((r) => plotted(r[metrics[0]]));
     if (values.some((v) => v == null || v < 0)) return { error: 'pie cannot show negative or empty values. Use a bar chart.' };
+    if (values.every((v) => v === 0)) return { error: `${metrics[0]} is zero for every row, so a pie has no shares to show.` };
     return { config: pieConfig(chartTitle, rows.map((r) => label(r[xName])), values) };
   }
 
@@ -199,6 +209,8 @@ function buildChart({ chartType, title: chartTitle, reply, limited }) {
   if (built.error) return built;
 
   const url = imageUrl(built.config);
+  if (url.length > MAX_URL_LENGTH) return { error: 'This chart holds too many values for one image. Add a filter, a coarser group_by, or limit with sort.' };
+  const altText = chartTitle.replace(/[\[\]\\\r\n]+/g, ' ');
   const notes = [];
   if (reply.truncated) notes.push(`Shows ${rows.length} of ${reply.groups_total} groups, chosen by limit and sort.`);
   if (metrics.some((m) => /^avg_.*_pct$/.test(m))) {
@@ -209,7 +221,7 @@ function buildChart({ chartType, title: chartTitle, reply, limited }) {
     title: chartTitle,
     chart_type: chartType,
     image_url: url,
-    markdown: `![${chartTitle}](${url})`,
+    markdown: `![${altText}](${url})`,
     group_by: groups,
     metrics,
     rows_matched: reply.rows_matched,

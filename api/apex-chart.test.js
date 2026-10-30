@@ -83,6 +83,36 @@ test('cut-off totals are refused unless limit asked for a top N, which is then d
   assert.match(top.notes[0], /1 of 1500/);
 });
 
+test('a title or label can never become code in the chart config', () => {
+  const attack = '__JS__globalThis.injected=1__JS__';
+  const old = `"__JS__x`;
+  const chart = buildChart({
+    chartType: 'bar',
+    title: attack,
+    reply: reply([{ a: attack, sum_v: 1 }, { a: old, sum_v: 2 }], ['a'], ['sum_v']),
+    limited: false,
+  });
+  const config = configOf(chart);
+  assert.deepEqual(config.data.labels, [attack, old]);
+  assert.equal(config.options.plugins.title.text, attack);
+  assert.equal(globalThis.injected, undefined);
+  assert.equal(typeof config.options.plugins.datalabels.formatter, 'function', 'real formatters still run');
+});
+
+test('a title cannot break the markdown image', () => {
+  const chart = buildChart({ chartType: 'bar', title: 'a]b\nc[d', reply: reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v']), limited: false });
+  assert.match(chart.markdown, /^!\[a b c d\]\(https:/);
+  assert.equal(configOf(chart).options.plugins.title.text, 'a]b\nc[d', 'the drawn title is unchanged');
+});
+
+test('charts with nothing to show or too much for one image are refused', () => {
+  assert.match(draw('heatmap', [{ a: 'x', b: 'y', sum_v: null }], ['a', 'b'], ['sum_v']).error, /empty for every row/);
+  assert.match(draw('pie', [{ a: 'x', sum_v: 0 }, { a: 'y', sum_v: 0 }], ['a'], ['sum_v']).error, /zero for every row/);
+  const grid = [];
+  for (let x = 0; x < MAX_CATEGORIES; x++) for (let y = 0; y < MAX_CATEGORIES; y++) grid.push({ a: `x${x}`, b: `y${y}`, sum_v: x * y });
+  assert.match(draw('heatmap', grid, ['a', 'b'], ['sum_v']).error, /too many values/);
+});
+
 test('an average of a percentage carries a caveat, a sum does not', () => {
   const rows = [{ a: 'x', avg_gross_margin_pct: 0.4, sum_v: 1 }];
   assert.match(draw('bar', rows, ['a'], ['avg_gross_margin_pct']).notes[0], /count every row equally/);
