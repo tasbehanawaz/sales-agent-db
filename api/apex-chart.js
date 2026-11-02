@@ -5,7 +5,12 @@ const fs = require('fs');
 const path = require('path');
 const { reportsDir } = require('./reports/writeReport');
 
-const PALETTE = ['#4C78A8', '#F58518', '#54A24B', '#E45756', '#72B7B2', '#B279A2', '#FF9DA6', '#9D755D', '#BAB0AC', '#EECA3B', '#3B7A57', '#8E6C8A'];
+const PALETTE = ['#2563EB', '#0D9488', '#D97706', '#DB2777', '#7C3AED', '#65A30D', '#0891B2', '#DC2626', '#4F46E5', '#B45309', '#059669', '#9333EA'];
+const INK = '#1F2937';
+const MUTED = '#6B7280';
+const GRID = '#EEF0F3';
+const RADAR_GRID = '#D9DDE3';
+const FONT = 'Roboto';
 const CHART_TYPES = ['bar', 'horizontal_bar', 'stacked_bar', 'line', 'area', 'combo', 'pie', 'donut', 'heatmap', 'scatter', 'bubble', 'radar', 'histogram', 'waterfall'];
 // Shares, distributions and running totals are wrong unless every group is present.
 const NEEDS_EVERY_GROUP = ['pie', 'donut', 'stacked_bar', 'histogram', 'waterfall'];
@@ -19,20 +24,20 @@ const POINT_LABEL_LIMIT = 15;
 const MAX_RADAR_AXES = 12;
 const MAX_RADAR_SERIES = 6;
 const MAX_HISTOGRAM_BINS = 12;
-const POSITIVE = '#54A24B';
-const NEGATIVE = '#E45756';
+const POSITIVE = '#16A34A';
+const NEGATIVE = '#DC2626';
 const BAR_LABEL_LIMIT = 15;
 const WIDTH = 900;
 const HEIGHT = 500;
-// QuickChart accepted 64,000 characters and refused 128,000. The largest Vertx heatmap is about 12,300,
-// so this stays near what is known to work.
-const MAX_URL_LENGTH = 16000;
+// QuickChart accepted 64,000 characters and refused 128,000. The largest Vertx heatmap is about 13,000,
+// so this leaves room while staying well inside what is known to work.
+const MAX_URL_LENGTH = 20000;
 const RENDER_TIMEOUT_MS = 20000;
 
 // These run inside QuickChart, so they cannot use anything from this file or contain a double quote.
 const formatValue = (v) => (v == null ? '' : Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString());
 const heatLabel = (p) => { const v = p.v; return Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString(); };
-const heatLabelColor = (c) => (c.dataset.data[c.dataIndex].d ? '#ffffff' : '#102033');
+const heatLabelColor = (c) => (c.dataset.data[c.dataIndex].d ? '#ffffff' : '#1F2937');
 const pieLabel = (v, c) => { if (!v) return ''; const total = c.dataset.data.reduce((a, b) => a + b, 0); const n = Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString(); return n + ' (' + Math.round((v / total) * 100) + '%)'; };
 
 const waterfallLabel = (v) => { const n = v[1] - v[0]; return Math.abs(n) >= 1e6 ? +(n / 1e6).toFixed(1) + 'm' : (+n.toFixed(3)).toLocaleString(); };
@@ -107,11 +112,50 @@ function pivot(rows, xName, seriesName, metric) {
 
 function title(text) {
   // The bottom padding keeps a value label on the tallest bar clear of the title.
-  return { display: true, text, font: { size: 16 }, padding: { bottom: 22 } };
+  return { display: true, text, align: 'start', color: INK, font: { family: FONT, size: 18, weight: '600' }, padding: { bottom: 22 } };
 }
 
 function axisTitle(text) {
-  return { display: true, text };
+  return { display: true, text, color: MUTED, font: { family: FONT, size: 13 } };
+}
+
+function styledScale(scale, radial) {
+  return {
+    ...scale,
+    grid: { color: radial ? RADAR_GRID : GRID, drawBorder: false, ...scale.grid },
+    // Only value axes format their ticks, and they recede behind the category names.
+    ticks: { color: scale.ticks?.callback ? MUTED : INK, font: { family: FONT, size: 13 }, ...(radial ? { z: 1, showLabelBackdrop: false } : { padding: 8 }), ...scale.ticks },
+    ...(radial && { angleLines: { color: RADAR_GRID }, pointLabels: { color: INK, font: { family: FONT, size: 13 } } }),
+  };
+}
+
+// The look shared by every chart type, so each chart only states what is particular to it.
+function styled(config) {
+  const { plugins, scales = {} } = config.options;
+  const { legend, datalabels } = plugins;
+  return {
+    ...config,
+    options: {
+      ...config.options,
+      layout: { padding: 16 },
+      plugins: {
+        ...plugins,
+        legend: legend.display
+          ? { ...legend, align: 'start', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 18, color: INK, font: { family: FONT, size: 13 } } }
+          : legend,
+        datalabels: datalabels.display
+          ? { color: INK, ...datalabels, font: { family: FONT, size: 13, weight: '600', ...datalabels.font } }
+          : datalabels,
+      },
+      scales: Object.fromEntries(Object.entries(scales).map(([name, scale]) => [name, styledScale(scale, name === 'r')])),
+    },
+  };
+}
+
+// A value with an empty month on both sides has no line to appear on, so it needs a dot.
+function linePoints(data) {
+  const lone = data.map((v, i) => (v != null && data[i - 1] == null && data[i + 1] == null ? 4 : 0));
+  return lone.some(Boolean) ? lone : 0;
 }
 
 function cartesian(kind, chartTitle, xs, series) {
@@ -129,18 +173,21 @@ function cartesian(kind, chartTitle, xs, series) {
       datasets: series.map((s, i) => ({
         label: s.name,
         data: s.data,
-        borderColor: PALETTE[i],
-        backgroundColor: kind === 'area' ? `${PALETTE[i]}40` : PALETTE[i],
-        ...(isLine ? { fill: kind === 'area', pointRadius: 2, tension: 0, spanGaps: false } : { maxBarThickness: 56 }),
+        borderColor: stacked ? '#ffffff' : PALETTE[i],
+        backgroundColor: kind === 'area' ? `${PALETTE[i]}22` : PALETTE[i],
+        // Monotone smoothing cannot bend past a real value.
+        ...(isLine
+          ? { fill: kind === 'area', borderWidth: 2.5, pointRadius: linePoints(s.data), pointBackgroundColor: PALETTE[i], cubicInterpolationMode: 'monotone', spanGaps: false }
+          : { maxBarThickness: 56, ...(stacked ? { borderWidth: 1 } : { borderRadius: 6, borderSkipped: 'start' }) }),
       })),
     },
     options: {
       ...(horizontal && { indexAxis: 'y' }),
       plugins: {
         title: title(chartTitle),
-        legend: { display: !single, position: 'bottom' },
+        legend: { display: !single, position: 'top' },
         datalabels: !isLine && !stacked && single && xs.length <= BAR_LABEL_LIMIT
-          ? { display: true, anchor: 'end', align: 'end', font: { size: 11 }, formatter: formatValue }
+          ? { display: true, anchor: 'end', align: 'end', formatter: formatValue }
           : { display: false },
       },
       scales: horizontal ? { x: valueAxis, y: categoryAxis } : { y: valueAxis, x: categoryAxis },
@@ -155,12 +202,12 @@ function comboConfig(chartTitle, xs, [barSeries, lineSeries]) {
     data: {
       labels: xs,
       datasets: [
-        { type: 'line', label: lineSeries.name, data: lineSeries.data, yAxisID: 'y1', borderColor: PALETTE[1], backgroundColor: PALETTE[1], fill: false, pointRadius: 3, tension: 0 },
-        { type: 'bar', label: barSeries.name, data: barSeries.data, yAxisID: 'y', backgroundColor: PALETTE[0], maxBarThickness: 56 },
+        { type: 'line', label: lineSeries.name, data: lineSeries.data, yAxisID: 'y1', borderColor: PALETTE[1], backgroundColor: PALETTE[1], fill: false, borderWidth: 2.5, pointRadius: 3, cubicInterpolationMode: 'monotone' },
+        { type: 'bar', label: barSeries.name, data: barSeries.data, yAxisID: 'y', backgroundColor: PALETTE[0], maxBarThickness: 56, borderRadius: 6, borderSkipped: 'start' },
       ],
     },
     options: {
-      plugins: { title: title(chartTitle), legend: { display: true, position: 'bottom' }, datalabels: { display: false } },
+      plugins: { title: title(chartTitle), legend: { display: true, position: 'top' }, datalabels: { display: false } },
       scales: {
         x: { grid: { display: false } },
         y: { position: 'left', title: axisTitle(barSeries.name), ticks: { callback: formatValue } },
@@ -179,7 +226,7 @@ function pointsConfig(type, chartTitle, points, xName, yName) {
         title: title(chartTitle),
         legend: { display: false },
         datalabels: points.length <= POINT_LABEL_LIMIT
-          ? { display: true, align: 'top', font: { size: 10 }, formatter: pointLabel }
+          ? { display: true, anchor: 'end', align: 'top', font: { size: 11, weight: '400' }, formatter: pointLabel }
           : { display: false },
       },
       scales: {
@@ -198,7 +245,7 @@ function radarConfig(chartTitle, axes, series, scaled) {
       datasets: series.map((s, i) => ({ label: s.name, data: s.data, borderColor: PALETTE[i], backgroundColor: `${PALETTE[i]}20`, pointRadius: 3, fill: true })),
     },
     options: {
-      plugins: { title: title(chartTitle), legend: { display: series.length > 1, position: 'bottom' }, datalabels: { display: false } },
+      plugins: { title: title(chartTitle), legend: { display: series.length > 1, position: 'top' }, datalabels: { display: false } },
       // A filled shape reads as an amount, so its centre has to be zero.
       scales: { r: { ...(scaled ? { min: 0, max: 100 } : { beginAtZero: true }), ticks: { callback: formatValue } } },
     },
@@ -235,12 +282,12 @@ function histogramBins(values) {
 function histogramConfig(chartTitle, bins, metric) {
   return {
     type: 'bar',
-    data: { labels: bins.map((b) => b.range), datasets: [{ label: 'Count', data: bins.map((b) => b.count), backgroundColor: PALETTE[0], barPercentage: 1, categoryPercentage: 0.98 }] },
+    data: { labels: bins.map((b) => b.range), datasets: [{ label: 'Count', data: bins.map((b) => b.count), backgroundColor: PALETTE[0], borderRadius: 4, borderSkipped: 'start', barPercentage: 1, categoryPercentage: 0.96 }] },
     options: {
       plugins: {
         title: title(chartTitle),
         legend: { display: false },
-        datalabels: { display: true, anchor: 'end', align: 'end', font: { size: 11 } },
+        datalabels: { display: true, anchor: 'end', align: 'end' },
       },
       scales: {
         x: { title: axisTitle(`Range of ${humanize(metric)}`), grid: { display: false }, ticks: { maxRotation: 40, minRotation: 0 } },
@@ -271,13 +318,15 @@ function waterfallConfig(chartTitle, xs, values) {
         data: [...bars, [0, exact(running)]],
         backgroundColor: [...values.map((v) => (v < 0 ? NEGATIVE : POSITIVE)), PALETTE[0]],
         maxBarThickness: 56,
+        borderRadius: 6,
+        borderSkipped: false,
       }],
     },
     options: {
       plugins: {
         title: title(chartTitle),
         legend: { display: false },
-        datalabels: { display: true, anchor: 'end', align: 'end', font: { size: 11 }, formatter: waterfallLabel },
+        datalabels: { display: true, anchor: 'end', align: 'end', formatter: waterfallLabel },
       },
       scales: { y: { ticks: { callback: formatValue } }, x: { grid: { display: false }, ticks: { maxRotation: 40, minRotation: 0 } } },
     },
@@ -287,19 +336,19 @@ function waterfallConfig(chartTitle, xs, values) {
 function pieConfig(type, chartTitle, xs, values) {
   return {
     type,
-    data: { labels: xs, datasets: [{ data: values, backgroundColor: xs.map((_, i) => PALETTE[i]), borderColor: '#ffffff' }] },
+    data: { labels: xs, datasets: [{ data: values, backgroundColor: xs.map((_, i) => PALETTE[i]), borderColor: '#ffffff', borderWidth: 3, borderRadius: 4 }] },
     options: {
       plugins: {
         title: title(chartTitle),
         legend: { display: true, position: 'right' },
-        datalabels: { display: true, color: '#ffffff', font: { size: 12, weight: 'bold' }, formatter: pieLabel },
+        datalabels: { display: true, color: '#ffffff', font: { size: 12 }, formatter: pieLabel },
       },
     },
   };
 }
 
 function heatColor(t) {
-  return `rgb(${Math.round(232 - t * 176)},${Math.round(244 - t * 150)},${Math.round(255 - t * 70)})`;
+  return `rgb(${Math.round(219 - t * 190)},${Math.round(234 - t * 156)},${Math.round(254 - t * 38)})`;
 }
 
 function heatmapConfig(chartTitle, xs, ys, cells) {
@@ -324,7 +373,7 @@ function heatmapConfig(chartTitle, xs, ys, cells) {
       plugins: {
         title: title(chartTitle),
         legend: { display: false },
-        datalabels: { display: true, align: 'center', anchor: 'center', font: { size: 11, weight: 'bold' }, formatter: heatLabel, color: heatLabelColor },
+        datalabels: { display: true, align: 'center', anchor: 'center', font: { size: 12 }, formatter: heatLabel, color: heatLabelColor },
       },
       scales: {
         x: { type: 'category', labels: xs, offset: true, grid: { display: false } },
@@ -495,7 +544,7 @@ function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
   const built = buildConfig(chartType, chartTitle, withUniqueLabels(rows, groups), groups, metrics, reply.truncated, sorted);
   if (built.error) return built;
 
-  const url = imageUrl(built.config);
+  const url = imageUrl(styled(built.config));
   if (url.length > MAX_URL_LENGTH) return { error: 'This chart holds too many values for one image. Add a filter, a coarser group_by, or limit with sort.' };
   const notes = [...(built.notes || [])];
   if (reply.truncated) notes.push(`Shows ${rows.length} of ${reply.groups_total} groups, chosen by limit and sort.`);
