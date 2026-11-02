@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
+const { reportsDir } = require('./reports/writeReport');
 const { TOOLS, RUN_MANY, requestPath, mcpHandler } = require('./mcp');
 
 test('every tool has a unique, client-safe name', () => {
@@ -52,6 +55,7 @@ test('apex_chart asks the route for totals only and reports its answers', async 
   app.use(express.json());
   app.post('/mcp', mcpHandler({ port: backend.address().port, apiKey: 'unused' }));
   const server = app.listen(0);
+  const before = new Set(fs.readdirSync(reportsDir));
   const call = async (extra) => {
     const args = { table: 'action-catalog', chart_type: 'bar', title: 'T', group_by: 'a', metrics: 'sum:v', ...extra };
     const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'apex_chart', arguments: args } };
@@ -62,7 +66,7 @@ test('apex_chart asks the route for totals only and reports its answers', async 
   try {
     const drawn = await call({ region: 'North' });
     assert.equal(drawn.isError, false);
-    assert.match(JSON.parse(drawn.text).markdown, /^!\[T\]\(https:/);
+    assert.match(JSON.parse(drawn.text).markdown, /^!\[T\]\(http:\/\/127\.0\.0\.1:\d+\/charts\/chart-[a-f0-9]{16}\.png\)$/);
     assert.deepEqual(seen[0], { group_by: 'a', metrics: 'sum:v', region: 'North' }, 'chart_type and title stay out of the route query');
 
     const refused = await call({ region: 'Nowhere' });
@@ -78,6 +82,7 @@ test('apex_chart asks the route for totals only and reports its answers', async 
     const top = await call({ limit: 1, sort: '-sum_v' });
     assert.match(JSON.parse(top.text).notes[0], /1 of 5/, 'limit allows a cut-off list and discloses it');
   } finally {
+    for (const file of fs.readdirSync(reportsDir)) if (!before.has(file)) fs.rmSync(path.join(reportsDir, file));
     server.close();
     backend.close();
   }

@@ -10,7 +10,7 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { swaggerSpec } = require('./swagger');
 const { TABLES: APEX_TABLES } = require('./apex-table-routes');
-const { CHART_TYPES, buildChart } = require('./apex-chart');
+const { CHART_TYPES, buildChart, publishChart } = require('./apex-chart');
 const { name, version } = require('./package.json');
 
 const APEX_TABLE_PREFIX = '/api/apex/tables/';
@@ -190,7 +190,9 @@ async function runChart(tool, { chart_type: chartType, title, ...query }, ctx) {
   const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, query) });
   if (status >= 400) return { isError: true, text: body };
   const chart = buildChart({ chartType, title, reply: JSON.parse(body), limited: query.limit != null, sorted: Boolean(String(query.sort ?? '').trim()) });
-  return { isError: Boolean(chart.error), text: chart.error || JSON.stringify(chart) };
+  if (chart.error) return { isError: true, text: chart.error };
+  const published = await publishChart(chart, ctx.req);
+  return { isError: Boolean(published.error), text: published.error || JSON.stringify(published) };
 }
 
 // One model step instead of one per tool: an agent that needs several figures asks for all of them at once,

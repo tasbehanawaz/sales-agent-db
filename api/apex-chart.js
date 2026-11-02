@@ -1,6 +1,9 @@
 // Turns one apex_table totals reply into a QuickChart image. The numbers always come from the
 // API reply, never from the model, and the first group_by column is the chart's x axis.
-const { randomUUID } = require('crypto');
+const { randomBytes, randomUUID } = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { reportsDir } = require('./reports/writeReport');
 
 const PALETTE = ['#4C78A8', '#F58518', '#54A24B', '#E45756', '#72B7B2', '#B279A2', '#FF9DA6', '#9D755D', '#BAB0AC', '#EECA3B', '#3B7A57', '#8E6C8A'];
 const CHART_TYPES = ['bar', 'horizontal_bar', 'stacked_bar', 'line', 'area', 'combo', 'pie', 'donut', 'heatmap', 'scatter', 'bubble', 'radar', 'histogram', 'waterfall'];
@@ -21,9 +24,10 @@ const NEGATIVE = '#E45756';
 const BAR_LABEL_LIMIT = 15;
 const WIDTH = 900;
 const HEIGHT = 500;
-// QuickChart accepted 64,000 characters and refused 128,000, but the agent has to copy the URL into its
-// reply. The current Vertx heatmap works at about 12,300, so this stays near what is known to work.
+// QuickChart accepted 64,000 characters and refused 128,000. The largest Vertx heatmap is about 12,300,
+// so this stays near what is known to work.
 const MAX_URL_LENGTH = 16000;
+const RENDER_TIMEOUT_MS = 20000;
 
 // These run inside QuickChart, so they cannot use anything from this file or contain a double quote.
 const formatValue = (v) => (v == null ? '' : Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'm' : (+v.toFixed(3)).toLocaleString());
@@ -493,7 +497,6 @@ function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
 
   const url = imageUrl(built.config);
   if (url.length > MAX_URL_LENGTH) return { error: 'This chart holds too many values for one image. Add a filter, a coarser group_by, or limit with sort.' };
-  const altText = chartTitle.replace(/[\[\]\\\r\n]+/g, ' ');
   const notes = [...(built.notes || [])];
   if (reply.truncated) notes.push(`Shows ${rows.length} of ${reply.groups_total} groups, chosen by limit and sort.`);
   if (metrics.some((m) => /^avg_.*_pct$/.test(m))) {
@@ -504,7 +507,6 @@ function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
     title: chartTitle,
     chart_type: chartType,
     image_url: url,
-    markdown: `![${altText}](${url})`,
     group_by: groups,
     metrics,
     rows_matched: reply.rows_matched,
@@ -516,4 +518,18 @@ function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
   };
 }
 
-module.exports = { CHART_TYPES, buildChart, MAX_CATEGORIES, MAX_SLICES };
+/**
+ * Save the drawn chart and point the reply at a short link on this API, served by /charts/:filename.
+ * The QuickChart URL fills the chat while the agent types it, and QuickChart's own short links expire after 3 days.
+ */
+async function publishChart(chart, req) {
+  const image = await fetch(chart.image_url, { signal: AbortSignal.timeout(RENDER_TIMEOUT_MS) });
+  if (!image.ok) return { error: `The chart image could not be drawn (QuickChart answered ${image.status}). Try once more.` };
+  const filename = `chart-${randomBytes(8).toString('hex')}.png`;
+  await fs.promises.writeFile(path.join(reportsDir, filename), Buffer.from(await image.arrayBuffer()));
+  const url = `${req.protocol}://${req.get('host')}/charts/${filename}`;
+  const altText = chart.title.replace(/[\[\]\\\r\n]+/g, ' ');
+  return { ...chart, image_url: url, markdown: `![${altText}](${url})` };
+}
+
+module.exports = { CHART_TYPES, buildChart, publishChart, MAX_CATEGORIES, MAX_SLICES };

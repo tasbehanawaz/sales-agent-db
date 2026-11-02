@@ -71,7 +71,7 @@ Send the API key as `x-api-key`.
   the first `group_by` column is usually the x axis and a second the series (or the heatmap's y axis); the tool description covers scatter, bubble,
   radar and histogram. The reply has `markdown` (the image), `data` (the real figures behind it: bins for a histogram, rows plus Total for a waterfall)
   and `notes` (caveats). A chart that can't be drawn as asked is refused with the change that would fix it.
-  Images are drawn by quickchart.io, so the plotted figures are sent there inside the image URL.
+  Images are drawn by quickchart.io, so the plotted figures are sent there, then saved in `reports/generated` and served at a short public link, `/charts/chart-<id>.png`.
   `{"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue"}`.
 - Report tools (`*_reports_generate*`) return a `download_url`. Download endpoints are not tools.
 - `run_many` runs up to 10 tools in parallel in one call: `{"calls":[{"tool":"apex_customer_risk","arguments":{"limit":10}},{"tool":"sales_insights"}]}`.
