@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildChart, MAX_CATEGORIES, MAX_SLICES } = require('./apex-chart');
+const fs = require('fs');
+const path = require('path');
+const { buildChart, publishChart, MAX_CATEGORIES, MAX_SLICES } = require('./apex-chart');
+const { reportsDir } = require('./reports/writeReport');
 
 function reply(data, group_by, metrics, extra = {}) {
   return { data, group_by, metrics, rows_matched: data.length, groups_total: data.length, truncated: false, ...extra };
@@ -23,7 +26,6 @@ test('a line puts months in time order and one series per second group, with gap
   const { data } = configOf(chart);
   assert.deepEqual(data.labels, ['2026-01', '2026-02']);
   assert.deepEqual(data.datasets.map((d) => [d.label, d.data]), [['North', [10, 20]], ['South', [30, null]]]);
-  assert.match(chart.markdown, /^!\[T\]\(https:\/\/quickchart\.io\/chart\?/);
   assert.equal(chart.data.length, 3, 'the agent gets the plotted figures');
 });
 
@@ -99,10 +101,18 @@ test('a title or label can never become code in the chart config', () => {
   assert.equal(typeof config.options.plugins.datalabels.formatter, 'function', 'real formatters still run');
 });
 
-test('a title cannot break the markdown image', () => {
-  const chart = buildChart({ chartType: 'bar', title: 'a]b\nc[d', reply: reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v']), limited: false });
-  assert.match(chart.markdown, /^!\[a b c d\]\(https:/);
-  assert.equal(configOf(chart).options.plugins.title.text, 'a]b\nc[d', 'the drawn title is unchanged');
+test('a published chart is a saved PNG behind a short link, and a title cannot break the markdown', async () => {
+  const drawn = buildChart({ chartType: 'bar', title: 'a[b]c\nd', reply: reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v']), limited: false });
+  const chart = await publishChart(drawn, { protocol: 'https', get: () => 'api.example.com' });
+  const [, altText, filename] = chart.markdown.match(/^!\[(.*)\]\(https:\/\/api\.example\.com\/charts\/(chart-[a-f0-9]{16}\.png)\)$/);
+  assert.equal(altText, 'a b c d');
+  assert.equal(chart.image_url, `https://api.example.com/charts/${filename}`);
+  const saved = path.join(reportsDir, filename);
+  try {
+    assert.equal(fs.readFileSync(saved).subarray(1, 4).toString(), 'PNG');
+  } finally {
+    fs.rmSync(saved);
+  }
 });
 
 test('charts with nothing to show or too much for one image are refused', () => {

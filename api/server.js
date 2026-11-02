@@ -689,6 +689,19 @@ app.get('/reports/download/:filename', (req, res) => {
   }
 });
 
+// Public chart images, so they can be shown in chat (no API key required)
+app.get('/charts/:filename', (req, res) => {
+  const { filename } = req.params;
+  if (!/^chart-[a-f0-9]{16}\.png$/.test(filename)) {
+    return res.status(400).json({ success: false, error: 'Invalid filename format' });
+  }
+  const filepath = path.join(reportsDir, filename);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ success: false, error: 'Chart not found' });
+  }
+  res.sendFile(filepath);
+});
+
 app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Endpoint not found' });
 });
