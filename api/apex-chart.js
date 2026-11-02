@@ -523,10 +523,14 @@ function buildChart({ chartType, title: chartTitle, reply, limited, sorted }) {
  * The QuickChart URL fills the chat while the agent types it, and QuickChart's own short links expire after 3 days.
  */
 async function publishChart(chart, req) {
-  const image = await fetch(chart.image_url, { signal: AbortSignal.timeout(RENDER_TIMEOUT_MS) });
-  if (!image.ok) return { error: `The chart image could not be drawn (QuickChart answered ${image.status}). Try once more.` };
   const filename = `chart-${randomBytes(8).toString('hex')}.png`;
-  await fs.promises.writeFile(path.join(reportsDir, filename), Buffer.from(await image.arrayBuffer()));
+  try {
+    const image = await fetch(chart.image_url, { signal: AbortSignal.timeout(RENDER_TIMEOUT_MS) });
+    if (!image.ok) throw new Error(`QuickChart answered ${image.status}`);
+    await fs.promises.writeFile(path.join(reportsDir, filename), Buffer.from(await image.arrayBuffer()));
+  } catch (err) {
+    return { error: `The chart image could not be drawn (${err.message}). Try once more.` };
+  }
   const url = `${req.protocol}://${req.get('host')}/charts/${filename}`;
   const altText = chart.title.replace(/[\[\]\\\r\n]+/g, ' ');
   return { ...chart, image_url: url, markdown: `![${altText}](${url})` };

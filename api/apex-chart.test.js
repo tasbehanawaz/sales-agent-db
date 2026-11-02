@@ -101,6 +101,11 @@ test('a title or label can never become code in the chart config', () => {
   assert.equal(typeof config.options.plugins.datalabels.formatter, 'function', 'real formatters still run');
 });
 
+test('a chart image that cannot be fetched comes back as an error to retry', async () => {
+  const result = await publishChart({ title: 'T', image_url: 'http://127.0.0.1:1/chart' }, { protocol: 'https', get: () => 'api.example.com' });
+  assert.match(result.error, /could not be drawn .* Try once more/);
+});
+
 test('a published chart is a saved PNG behind a short link, and a title cannot break the markdown', async () => {
   const drawn = buildChart({ chartType: 'bar', title: 'a[b]c\nd', reply: reply([{ a: 'x', sum_v: 1 }], ['a'], ['sum_v']), limited: false });
   const chart = await publishChart(drawn, { protocol: 'https', get: () => 'api.example.com' });
