@@ -107,6 +107,8 @@ test('a line stays on its real values, and a value between two gaps still shows'
   const [series] = configOf(draw('line', months.map((month, i) => ({ month, sum_v: values[i] })), ['month'], ['sum_v'])).data.datasets;
   assert.equal(series.cubicInterpolationMode, 'monotone');
   assert.deepEqual(series.pointRadius, [0, 0, 0, 4, 0]);
+  const [ends] = configOf(draw('line', months.map((month, i) => ({ month, sum_v: [1, null, 2, 3, null, 5][i] ?? null })), ['month'], ['sum_v'])).data.datasets;
+  assert.deepEqual(ends.pointRadius, [4, 0, 0, 0, 0]);
 });
 
 test('a chart image that cannot be fetched comes back as an error to retry', async () => {

@@ -17,7 +17,7 @@ const NEEDS_EVERY_GROUP = ['pie', 'donut', 'stacked_bar', 'histogram', 'waterfal
 // Past these a chart stops being readable, so the agent is told to narrow it instead of getting a cut-off chart.
 const MAX_CATEGORIES = 40;
 const MAX_SERIES = PALETTE.length;
-const MAX_SLICES = 12;
+const MAX_SLICES = PALETTE.length;
 const MAX_HORIZONTAL_BARS = 25;
 const MAX_POINTS = 100;
 const POINT_LABEL_LIMIT = 15;
@@ -336,7 +336,7 @@ function waterfallConfig(chartTitle, xs, values) {
 function pieConfig(type, chartTitle, xs, values) {
   return {
     type,
-    data: { labels: xs, datasets: [{ data: values, backgroundColor: xs.map((_, i) => PALETTE[i]), borderColor: '#ffffff', borderWidth: 3, borderRadius: 4 }] },
+    data: { labels: xs, datasets: [{ data: values, backgroundColor: xs.map((_, i) => PALETTE[i]), borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 }] },
     options: {
       plugins: {
         title: title(chartTitle),
@@ -362,7 +362,7 @@ function heatmapConfig(chartTitle, xs, ys, cells) {
     type: 'scatter',
     data: {
       datasets: [{
-        data: cells.map((c) => ({ x: c.x, y: c.y, v: c.v, ...(share(c.v) > 0.62 && { d: 1 }) })),
+        data: cells.map((c) => ({ x: c.x, y: c.y, v: c.v, ...(share(c.v) > 0.7 && { d: 1 }) })),
         pointStyle: 'rect',
         pointRadius: Math.round(side / Math.SQRT2),
         pointBackgroundColor: cells.map((c) => heatColor(share(c.v))),
