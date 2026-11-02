@@ -101,6 +101,14 @@ test('a title or label can never become code in the chart config', () => {
   assert.equal(typeof config.options.plugins.datalabels.formatter, 'function', 'real formatters still run');
 });
 
+test('a line stays on its real values, and a value between two gaps still shows', () => {
+  const months = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'];
+  const values = [1, 2, null, 4, null];
+  const [series] = configOf(draw('line', months.map((month, i) => ({ month, sum_v: values[i] })), ['month'], ['sum_v'])).data.datasets;
+  assert.equal(series.cubicInterpolationMode, 'monotone');
+  assert.deepEqual(series.pointRadius, [0, 0, 0, 4, 0]);
+});
+
 test('a chart image that cannot be fetched comes back as an error to retry', async () => {
   const result = await publishChart({ title: 'T', image_url: 'http://127.0.0.1:1/chart' }, { protocol: 'https', get: () => 'api.example.com' });
   assert.match(result.error, /could not be drawn .* Try once more/);
