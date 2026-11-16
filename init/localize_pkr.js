@@ -85,7 +85,8 @@ const USD_COLUMNS = Object.entries(MONEY.apex).flatMap(([table, cols]) =>
 // The investment ceilings are stored in USD millions with unit 'USDm'.
 const CONSTRAINT_UNIT = { from: 'USDm', to: 'PKR m' };
 
-const FOREIGN_TEXT = /\bUSD\b|\$|\bdollars?\b|\b(New York|London|Sao Paulo|São Paulo|Singapore|Canada|Europe|Latin|Asia|Berlin|Tokyo|Dubai|Toronto|Shanghai|Mexico|Los Angeles|Dallas|Chicago)\b|\bOffering \d+\b|Synthetic (composite|Customer|Vendor|audit finding|Payroll|Sales|Accrual|Allocation|AP expense|Cash receipt|Depreciation)/i;
+// usd anywhere, so _usd column names and USDm units are caught too.
+const FOREIGN_TEXT = /usd|\$|\bdollars?\b|\b(New York|London|Sao Paulo|São Paulo|Singapore|Canada|Europe|Latin|Asia|Berlin|Tokyo|Dubai|Toronto|Shanghai|Mexico|Los Angeles|Dallas|Chicago)\b|\bOffering \d+\b|Synthetic (composite|Customer|Vendor|audit finding|Payroll|Sales|Accrual|Allocation|AP expense|Cash receipt|Depreciation)/i;
 
 function connect(database = 'master', server = {}) {
   return new sql.ConnectionPool({
