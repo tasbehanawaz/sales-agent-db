@@ -655,7 +655,7 @@ async function getMetricSummary(req, res) {
       sql = `
         SELECT p.plant_name AS label,
           COUNT(*) AS record_count,
-          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(19,2)) AS avg_unit_cost
         FROM [${MFG_DB}].dbo.cost_records c
         JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = c.plant_id
         ${where}
@@ -665,7 +665,7 @@ async function getMetricSummary(req, res) {
       sql = `
         SELECT p.plant_name + ' / ' + l.line_name AS label,
           COUNT(*) AS record_count,
-          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(19,2)) AS avg_unit_cost
         FROM [${MFG_DB}].dbo.cost_records c
         JOIN [${MFG_DB}].dbo.plants p ON p.plant_id = c.plant_id
         JOIN [${MFG_DB}].dbo.production_lines l ON l.line_id = c.line_id
@@ -676,7 +676,7 @@ async function getMetricSummary(req, res) {
       sql = `
         SELECT CONVERT(char(7), c.date, 126) AS label,
           COUNT(*) AS record_count,
-          CAST(AVG(c.actual_cost_per_unit) AS decimal(10,2)) AS avg_unit_cost
+          CAST(AVG(c.actual_cost_per_unit) AS decimal(19,2)) AS avg_unit_cost
         FROM [${MFG_DB}].dbo.cost_records c
         ${where}
         GROUP BY CONVERT(char(7), c.date, 126)
@@ -818,11 +818,11 @@ async function getCostSummary(req, res) {
       SELECT
         COUNT(*) as record_count,
         SUM(units_produced) as total_units,
-        CAST(AVG(actual_cost_per_unit) AS DECIMAL(10,2)) as avg_unit_cost,
-        CAST(SUM(actual_cost_per_unit * units_produced) AS DECIMAL(12,2)) as total_production_cost,
-        CAST(SUM(energy_cost) AS DECIMAL(12,2)) as total_energy_cost,
-        CAST(SUM(scrap_cost) AS DECIMAL(12,2)) as total_scrap_cost,
-        CAST(SUM(labor_cost) AS DECIMAL(12,2)) as total_labor_cost,
+        CAST(AVG(actual_cost_per_unit) AS DECIMAL(19,2)) as avg_unit_cost,
+        CAST(SUM(actual_cost_per_unit * units_produced) AS DECIMAL(19,2)) as total_production_cost,
+        CAST(SUM(energy_cost) AS DECIMAL(19,2)) as total_energy_cost,
+        CAST(SUM(scrap_cost) AS DECIMAL(19,2)) as total_scrap_cost,
+        CAST(SUM(labor_cost) AS DECIMAL(19,2)) as total_labor_cost,
         CAST(AVG(energy_kwh / NULLIF(units_produced, 0)) AS DECIMAL(10,2)) as avg_energy_per_unit
       FROM [${MFG_DB}].dbo.cost_records WHERE 1=1`;
 
@@ -844,9 +844,9 @@ async function getCostSummary(req, res) {
       pl.plant_name,
       l.line_name,
       SUM(cr.units_produced) as units,
-      CAST(AVG(cr.actual_cost_per_unit) AS DECIMAL(10,2)) as avg_unit_cost,
-      CAST(SUM(cr.energy_cost) AS DECIMAL(12,2)) as energy_cost,
-      CAST(SUM(cr.scrap_cost) AS DECIMAL(12,2)) as scrap_cost
+      CAST(AVG(cr.actual_cost_per_unit) AS DECIMAL(19,2)) as avg_unit_cost,
+      CAST(SUM(cr.energy_cost) AS DECIMAL(19,2)) as energy_cost,
+      CAST(SUM(cr.scrap_cost) AS DECIMAL(19,2)) as scrap_cost
     FROM [${MFG_DB}].dbo.cost_records cr
     JOIN [${MFG_DB}].dbo.production_lines l ON cr.line_id = l.line_id
     JOIN [${MFG_DB}].dbo.plants pl ON cr.plant_id = pl.plant_id

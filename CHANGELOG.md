@@ -19,6 +19,13 @@
   calculated from the data.
 
 ### Changed
+- Data is localised for Pakistan by `init/localize_pkr.js`: Apex and manufacturing amounts are in PKR (280 per USD),
+  sales amounts are labelled PKR, and customers, vendors, offices, doctors, pharmacies, reps, plants, operators and
+  suppliers have local names. Apex columns `*_usd` / `*_usd_m` are now `*_pkr` / `*_pkr_m`. Reports print `PKR 1.82B`.
+  Going live: run `node init/localize_pkr.js apply --on <db host>` against the live server and deploy this API in
+  the same window, since the renamed columns and the new code depend on each other.
+- Apex table rows, `/api/apex/customer-risk` and `/api/apex/finance/receivables` carry `customer_name` (and
+  `vendor_name`, `offering_name` where the table has those ids), which can also be filtered and grouped on.
 - PDF reports for sales, manufacturing and Apex are now written documents: contents, executive summary, numbered
   sections with written analysis, key figures and full detail tables, recommended actions and an appendix listing
   scope, filters and source tables. Slides keep the short layout.

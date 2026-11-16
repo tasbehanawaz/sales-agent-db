@@ -19,8 +19,10 @@ const APEX_TABLE_PREFIX = '/api/apex/tables/';
 const APEX_TABLE_GUIDE = [
   'Read or total any Apex Group table. Without group_by or metrics it returns rows (capped by limit).',
   'With group_by and/or metrics it returns totals computed over every matching row: use that for any sum, average, rate, ranking or comparison instead of adding rows yourself.',
-  'Filters: from/to (YYYY-MM-DD) on the table\'s period column; the column filters listed by apex_tables; and business_unit, region, entity, department on tables linked to an org unit or entity.',
-  'For non-aggregate reads (no group_by, no metrics), select narrows the returned columns, e.g. select=customer_id,customer_name on dim-customer.',
+  'Filters: from/to (YYYY-MM-DD) on the table\'s period column; the column filters listed by apex_tables; business_unit, region, entity, department on tables linked to an org unit or entity; and customer_name, vendor_name, offering_name on tables with that id.',
+  'For non-aggregate reads (no group_by, no metrics), select narrows the returned columns, e.g. select=customer_name,net_revenue on fact-sales-transaction.',
+  'Name customers, vendors and offerings by customer_name, vendor_name and offering_name, never by their ids: rows already carry the name, and group_by customer_name totals by name.',
+  'All amounts are in Pakistani rupees (PKR). Columns ending _pkr_m are PKR millions.',
   'Metrics: count, distinct:<column>, sum|avg|min|max:<numeric column>. avg of a 0/1 flag is a rate (avg:late_flag = share of late tasks).',
   'If the reply has truncated: true, only the first groups (by sort) were returned: narrow the filters or sort by what matters.',
   'Point-in-time values (headcount, balances, outstanding amounts) are per month: filter or group by month instead of summing across months.',
@@ -46,11 +48,16 @@ const APEX_CHART_GUIDE = [
   'The first group_by column is the x axis. A second group_by column is one line or set of bars per value: use quarter,business_unit for a line per business unit.',
   'bar, horizontal_bar, stacked_bar, line and area take 1 group_by with one or more metrics, or 2 group_by with 1 metric. pie and donut take 1 group_by and 1 metric. heatmap takes 2 group_by and 1 metric.',
   'combo takes 1 group_by and 2 metrics (bars, then a line on its own scale), for a total beside a rate. scatter takes 1 group_by and 2 metrics (x, y); bubble takes 3 (x, y, size); use them to compare measures across items.',
-  'radar takes 1 or 2 group_by with 1 metric, or 1 group_by with 3 or more metrics. histogram takes 1 metric, and group_by sets what is counted: group_by customer_id counts customers in each range.',
+  'radar takes 1 or 2 group_by with 1 metric, or 1 group_by with 3 or more metrics. histogram takes 1 metric, and group_by sets what is counted: group_by customer_name counts customers in each range.',
   'waterfall takes 1 group_by and shows how values add up to a total. Set the order with sort, adding min:sequence as a second metric if needed; without sort, time columns run oldest first and other columns largest first.',
   'For a top N bar or line, pass limit and sort, e.g. "limit":5,"sort":"-sum_revenue". pie, donut, stacked_bar, histogram and waterfall need every group, so they refuse a cut-off list. Point-in-time values (headcount, balances) must be grouped or filtered by month, never summed across months.',
   'Example: {"table":"serving-executive-scorecard-monthly","chart_type":"line","title":"Revenue by quarter and region","group_by":"quarter,region","metrics":"sum:revenue","from":"2025-10-01","to":"2026-09-30"}.',
   'Reply: markdown holds the image to show, data holds the real figures behind it (bins for a histogram, rows plus Total for a waterfall), notes holds caveats to pass on.',
+].join(' ');
+// Sent to every MCP client when it connects.
+const INSTRUCTIONS = [
+  'All amounts in the sales, manufacturing and Apex data are Pakistani rupees (PKR); write them as PKR, never $ or USD.',
+  'Refer to customers, vendors, offerings, doctors, pharmacies, sales reps, plants and lines by name. Rows carry the name next to the id: quote the name, not the id.',
 ].join(' ');
 const LOOPBACK_TIMEOUT_MS = 120000;
 
@@ -244,7 +251,7 @@ const RUN_MANY = {
 const validateRunMany = ajv.compile(RUN_MANY.inputSchema);
 
 function createServer(ctx) {
-  const server = new Server({ name, version }, { capabilities: { tools: {} } });
+  const server = new Server({ name, version }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [...[...TOOLS.values()].map((t) => t.definition), RUN_MANY],

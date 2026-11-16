@@ -7,14 +7,18 @@ function n(v) {
   return Number.isFinite(x) ? x : 0;
 }
 
+// Every amount in the three databases is in Pakistani rupees.
+const CURRENCY = 'PKR';
+
+/** 1.82e9 → "PKR 1.82B", -4500 → "PKR -4.5K" */
 function money(v) {
   const x = n(v);
   const abs = Math.abs(x);
   const sign = x < 0 ? '-' : '';
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}$${abs.toFixed(abs < 100 && abs % 1 ? 2 : 0)}`;
+  if (abs >= 1e9) return `${CURRENCY} ${sign}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${CURRENCY} ${sign}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${CURRENCY} ${sign}${(abs / 1e3).toFixed(1)}K`;
+  return `${CURRENCY} ${sign}${abs.toFixed(abs < 100 && abs % 1 ? 2 : 0)}`;
 }
 
 function count(v) {
@@ -56,4 +60,4 @@ function limit(f, rows) {
   return f.detail ? Math.max(rows * 4, 50) : rows;
 }
 
-module.exports = { n, money, count, dec, frac, pct, share, day, monthLabel, limit };
+module.exports = { CURRENCY, n, money, count, dec, frac, pct, share, day, monthLabel, limit };

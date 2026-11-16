@@ -168,10 +168,10 @@ const SECTIONS = {
       table: {
         headers: ['#', 'Component', 'Before %', 'Impact (pp)', 'After %', 'EBITDA Impact', 'Evidence'],
         rows: rows.map((r) => [r.sequence, r.component, pct(r.margin_before_pct), dec(r.impact_percentage_points),
-          pct(r.margin_after_pct), money(r.estimated_ebitda_impact_usd), r.evidence_reference]),
+          pct(r.margin_after_pct), money(r.estimated_ebitda_impact_pkr), r.evidence_reference]),
         weights: [0.4, 2.2, 0.9, 0.9, 0.9, 1.1, 2],
       },
-      bullets: drags.slice(0, 3).map((r) => `${r.component}: ${dec(r.impact_percentage_points)} pp (${money(r.estimated_ebitda_impact_usd)})`),
+      bullets: drags.slice(0, 3).map((r) => `${r.component}: ${dec(r.impact_percentage_points)} pp (${money(r.estimated_ebitda_impact_pkr)})`),
     };
   },
 
@@ -823,7 +823,7 @@ const SECTIONS = {
   async 'workforce-risk'(f) {
     const w = where(f, { region: 'region', bu: 'business_unit' });
     const rows = await q(f, `SELECT role_cohort, SUM(headcount) headcount, AVG(attrition_probability) attrition,
-        SUM(expected_exits) exits, SUM(expected_capacity_gap_fte) gap, SUM(revenue_or_service_impact_usd) impact,
+        SUM(expected_exits) exits, SUM(expected_capacity_gap_fte) gap, SUM(revenue_or_service_impact_pkr) impact,
         SUM(CASE WHEN risk_band = 'High' THEN 1 ELSE 0 END) high
       FROM ${t('pred_workforce_risk')} ${w} GROUP BY role_cohort ORDER BY impact DESC`);
     const drivers = await q(f, `SELECT TOP 5 driver_1 driver, COUNT(*) c FROM ${t('pred_workforce_risk')} ${w}
@@ -1037,12 +1037,12 @@ const SECTIONS = {
 
   async 'recommendations'(f) {
     const w = where(f, { extra: scopeFilter(f, 'r.scope_id') });
-    const rows = await q(f, `SELECT TOP ${limit(f, 20)} c.action_name, c.[function] fn, r.scope_id, r.net_financial_benefit_usd net,
-        r.implementation_cost_usd cost, r.cash_benefit_usd cash, r.risk_reduction_points risk, r.confidence_score confidence,
+    const rows = await q(f, `SELECT TOP ${limit(f, 20)} c.action_name, c.[function] fn, r.scope_id, r.net_financial_benefit_pkr net,
+        r.implementation_cost_pkr cost, r.cash_benefit_pkr cash, r.risk_reduction_points risk, r.confidence_score confidence,
         r.priority_score priority, r.accountable_owner_role owner, r.time_to_impact_days days
       FROM ${t('action_recommendation')} r LEFT JOIN ${t('action_catalog')} c ON c.action_id = r.action_id
       ${w} ORDER BY r.priority_score DESC`);
-    const [s] = await q(f, `SELECT COUNT(*) recs, SUM(r.net_financial_benefit_usd) net, SUM(r.cash_benefit_usd) cash,
+    const [s] = await q(f, `SELECT COUNT(*) recs, SUM(r.net_financial_benefit_pkr) net, SUM(r.cash_benefit_pkr) cash,
         SUM(r.risk_reduction_points) risk, SUM(r.workforce_effect_fte) fte
       FROM ${t('action_recommendation')} r ${w}`);
     return {
@@ -1065,8 +1065,8 @@ const SECTIONS = {
   },
 
   async 'action-catalog'() {
-    const rows = await query(`SELECT [function] fn, COUNT(*) actions, SUM(active_flag) active, AVG(CAST(estimated_cost_usd AS float)) cost,
-        SUM(expected_benefit_usd_m) benefit, AVG(CAST(time_to_impact_days AS float)) days, SUM(risk_reduction_points) risk
+    const rows = await query(`SELECT [function] fn, COUNT(*) actions, SUM(active_flag) active, AVG(CAST(estimated_cost_pkr AS float)) cost,
+        SUM(expected_benefit_pkr_m) benefit, AVG(CAST(time_to_impact_days AS float)) days, SUM(risk_reduction_points) risk
       FROM ${t('action_catalog')} GROUP BY [function] ORDER BY benefit DESC`);
     return {
       id: 'action-catalog',
@@ -1080,23 +1080,23 @@ const SECTIONS = {
   },
 
   async 'scenarios'() {
-    const rows = await query(`SELECT * FROM ${t('scenario_simulation')} ORDER BY recommended_flag DESC, investment_usd_m`);
+    const rows = await query(`SELECT * FROM ${t('scenario_simulation')} ORDER BY recommended_flag DESC, investment_pkr_m`);
     const rec = rows.find((r) => n(r.recommended_flag)) || {};
     return {
       id: 'scenarios',
       title: `Scenario Simulation (${rec.scope_id || rows[0]?.scope_id || 'n/a'})`,
       kpis: [
         { label: 'Recommended', value: rec.scenario_id || 'n/a', color: 'success' },
-        { label: 'Investment', value: money(n(rec.investment_usd_m) * 1e6), color: 'primary' },
+        { label: 'Investment', value: money(n(rec.investment_pkr_m) * 1e6), color: 'primary' },
         { label: 'EBITDA Margin', value: pct(rec.ebitda_margin_pct), color: 'warning' },
-        { label: '6-Month Net Cash', value: money(n(rec.six_month_net_cash_benefit_usd_m) * 1e6), color: 'neutral' },
+        { label: '6-Month Net Cash', value: money(n(rec.six_month_net_cash_benefit_pkr_m) * 1e6), color: 'neutral' },
       ],
       table: {
         headers: ['Scenario', 'Investment', 'Headcount Growth', 'EBITDA %', 'DSO', 'Attrition', 'Ctrl Risk', '6-Mo Net Cash', 'Rev. Growth', 'Execution Risk'],
         describe: false,
-        rows: rows.map((r) => [`${r.scenario_id}${n(r.recommended_flag) ? ' *' : ''}`, money(n(r.investment_usd_m) * 1e6),
+        rows: rows.map((r) => [`${r.scenario_id}${n(r.recommended_flag) ? ' *' : ''}`, money(n(r.investment_pkr_m) * 1e6),
           pct(r.net_headcount_growth_pct), pct(r.ebitda_margin_pct), count(r.dso_days), pct(r.cohort_attrition_pct),
-          count(r.control_risk_index), money(n(r.six_month_net_cash_benefit_usd_m) * 1e6), pct(r.revenue_growth_pct), r.execution_risk]),
+          count(r.control_risk_index), money(n(r.six_month_net_cash_benefit_pkr_m) * 1e6), pct(r.revenue_growth_pct), r.execution_risk]),
         weights: [1.2, 1, 1.1, 0.9, 0.6, 0.9, 0.8, 1.1, 1, 2],
       },
       bullets: rec.rationale ? [`* Recommended. ${rec.rationale}`] : [],
@@ -1382,7 +1382,7 @@ async function topIssues(f) {
     GROUP BY c.customer_name ORDER BY rar DESC`);
   const [ctl] = await q(f, `SELECT TOP 1 process, SUM(expected_monetary_exposure) exposure FROM ${t('pred_control_risk')}
     ${where(f, { region: 'region', entity: 'entity_id' })} GROUP BY process ORDER BY exposure DESC`);
-  const [wf] = await q(f, `SELECT TOP 1 role_cohort, SUM(expected_exits) exits, SUM(revenue_or_service_impact_usd) impact
+  const [wf] = await q(f, `SELECT TOP 1 role_cohort, SUM(expected_exits) exits, SUM(revenue_or_service_impact_pkr) impact
     FROM ${t('pred_workforce_risk')} ${where(f, { region: 'region', bu: 'business_unit' })} GROUP BY role_cohort ORDER BY impact DESC`);
   const [ar] = await q(f, `SELECT SUM(outstanding_amount) overdue FROM ${t('fact_ar_invoice_payment')}
     ${where(f, { date: 'invoice_date', org: 'org_unit_id', extra: ['days_past_due > 90', 'outstanding_amount > 0'] })}`);
@@ -1396,7 +1396,7 @@ async function topIssues(f) {
 }
 
 async function recommendedActions(f) {
-  const rows = await q(f, `SELECT TOP 5 c.action_name, r.scope_id, r.net_financial_benefit_usd net, r.accountable_owner_role owner,
+  const rows = await q(f, `SELECT TOP 5 c.action_name, r.scope_id, r.net_financial_benefit_pkr net, r.accountable_owner_role owner,
       r.time_to_impact_days days
     FROM ${t('action_recommendation')} r LEFT JOIN ${t('action_catalog')} c ON c.action_id = r.action_id
     ${where(f, { extra: scopeFilter(f, 'r.scope_id') })} ORDER BY r.priority_score DESC`);

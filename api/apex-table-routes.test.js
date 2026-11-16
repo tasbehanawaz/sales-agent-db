@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { TABLES, tableFilters, aggregation, organisation, selectClause } = require('./apex-table-routes');
+const { TABLES, tableFilters, aggregation, organisation, related, selectClause, joins } = require('./apex-table-routes');
 
 test('from/to use the period key of tables without a date column', () => {
   const scorecard = tableFilters(TABLES['serving-executive-scorecard-monthly'], { from: '2025-10-01', to: '2026-09-30' }, {});
@@ -63,4 +63,34 @@ test('selectClause narrows non-aggregate reads to named columns', () => {
   assert.ok(selectClause(customer, 'nope').error, 'unknown column is rejected');
   assert.ok(selectClause(customer, 'constructor').error, 'Object.prototype names are not columns');
   assert.ok(selectClause(customer, 'customer_id,nope').error, 'any unknown column rejects the whole clause');
+});
+
+test('customer, vendor and offering names join in through their ids', () => {
+  const sales = TABLES['fact-sales-transaction'];
+  assert.deepEqual(related(sales).map((r) => r.name).filter((n) => n.endsWith('_name')), ['customer_name', 'offering_name']);
+  assert.deepEqual(related(TABLES['dim-customer']).map((r) => r.name), [], 'dim_customer has its own name');
+
+  const f = tableFilters(TABLES['pred-customer-risk'], { customer_name: 'Indus Power Limited' }, {});
+  assert.ok(f.clauses.includes('c.[customer_name] = @customer_name'));
+  assert.match(f.join, /dim_customer\] c ON c\.\[customer_id\] = t\.\[customer_id\]/);
+
+  const agg = aggregation(sales, { group_by: 'customer_name,region', metrics: 'sum:net_revenue' });
+  assert.match(agg.groupBy, /^GROUP BY c\.\[customer_name\], o\.\[region\]$/);
+  assert.equal((agg.join.match(/LEFT JOIN/g) || []).length, 2, 'one join per dimension');
+  assert.match(aggregation(TABLES['fact-ap-invoice-payment'], { metrics: 'distinct:vendor_name' }).select, /COUNT\(DISTINCT v\.\[vendor_name\]\)/);
+
+  const rows = selectClause(sales);
+  assert.equal(rows.sql, 't.*, c.[customer_name] AS [customer_name], ps.[offering_name] AS [offering_name]', 'rows carry the names by default');
+  const picked = selectClause(sales, 'customer_name,net_revenue');
+  assert.equal(picked.sql, 'c.[customer_name] AS [customer_name], t.[net_revenue]');
+  assert.doesNotMatch(picked.join, /dim_product_service/, 'only the joins the selected columns need');
+  assert.ok(selectClause(sales, 'vendor_name').error, 'sales rows have no vendor');
+  assert.equal(selectClause(TABLES['dim-customer'], 'customer_name').sql, 't.[customer_name]', 'own column, no join');
+});
+
+test('a dimension is joined once however many filters and groups need it', () => {
+  const sales = TABLES['fact-sales-transaction'];
+  const f = tableFilters(sales, { region: 'North', customer_name: 'x' }, {});
+  const agg = aggregation(sales, { group_by: 'customer_name,region', metrics: 'count' });
+  assert.equal(joins([f.join, agg.join]).split('\n').length, 2, 'one org join and one customer join, not three');
 });
