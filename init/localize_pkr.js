@@ -21,8 +21,9 @@
  *
  * What apply changes:
  *   Apex   every money column x RATE, currency and units to PKR, *_usd columns renamed *_pkr,
- *          entities and offices moved to Pakistani cities, customer, vendor and audit finding
- *          names replaced, "Synthetic" dropped from ledger descriptions.
+ *          entities and offices moved to Pakistani cities,
+ *          customer, vendor, offering and audit finding names replaced, "Synthetic" dropped
+ *          from ledger descriptions and KPI definitions.
  *   Mfg    every cost column x RATE, plants, lines and machines moved to Pakistani cities,
  *          operator and supplier names replaced.
  *   Sales  amounts unchanged: value_sold is already a believable rupee figure (about 176 a pack).
@@ -84,7 +85,7 @@ const USD_COLUMNS = Object.entries(MONEY.apex).flatMap(([table, cols]) =>
 // The investment ceilings are stored in USD millions with unit 'USDm'.
 const CONSTRAINT_UNIT = { from: 'USDm', to: 'PKR m' };
 
-const FOREIGN_TEXT = /\bUSD\b|\$|dollar|New York|London|Sao Paulo|São Paulo|Singapore|Canada|Europe|Latin|Asia|Berlin|Tokyo|Dubai|Toronto|Shanghai|Mexico|Los Angeles|Dallas|Chicago|Synthetic (Customer|Vendor|audit finding|Payroll|Sales|Accrual|Allocation|AP expense|Cash receipt|Depreciation)/i;
+const FOREIGN_TEXT = /\bUSD\b|\$|\bdollars?\b|\b(New York|London|Sao Paulo|São Paulo|Singapore|Canada|Europe|Latin|Asia|Berlin|Tokyo|Dubai|Toronto|Shanghai|Mexico|Los Angeles|Dallas|Chicago)\b|\bOffering \d+\b|Synthetic (composite|Customer|Vendor|audit finding|Payroll|Sales|Accrual|Allocation|AP expense|Cash receipt|Depreciation)/i;
 
 function connect(database = 'master', server = {}) {
   return new sql.ConnectionPool({
@@ -144,6 +145,7 @@ async function localiseApex(run, read) {
   }
   await run(`UPDATE action_recommendation SET rationale = REPLACE(rationale, ' for this synthetic scope', ' for this scope')`);
   await run(`UPDATE fact_gl_transaction SET description = journal_type WHERE description = 'Synthetic ' + journal_type`);
+  await run(`UPDATE meta_kpi_definition SET definition = REPLACE(definition, 'Synthetic composite index', 'Composite index')`);
 
   for (const [id, e] of Object.entries(names.APEX_ENTITIES)) {
     await run(`UPDATE dim_organisation SET entity = ${quote(e.entity)}, location = ${quote(e.location)} WHERE entity_id = ${quote(id)}`);
@@ -161,6 +163,15 @@ async function localiseApex(run, read) {
   const vendors = (await read('SELECT vendor_id, category FROM dim_vendor ORDER BY vendor_id'))
     .map((r) => ({ vendor_id: r.vendor_id, vendor_name: vendor(r.category) }));
   await updateFrom(run, 'dim_vendor', 'vendor_id', vendors, ['vendor_name']);
+
+  const offerings = await read('SELECT offering_id, business_unit FROM dim_product_service ORDER BY offering_id');
+  const seen = {};
+  await updateFrom(run, 'dim_product_service', 'offering_id', offerings.map((r) => {
+    const list = names.OFFERINGS[r.business_unit];
+    const i = (seen[r.business_unit] = (seen[r.business_unit] || 0) + 1) - 1;
+    if (!list || i >= list.length) throw new Error(`no offering name for ${r.offering_id} (${r.business_unit})`);
+    return { offering_id: r.offering_id, offering_name: list[i] };
+  }), ['offering_name']);
 
   await widen(run, read, 'fact_audit_finding', 'finding_title', 200);
   const findings = (await read('SELECT finding_id, process FROM fact_audit_finding ORDER BY finding_id'))
@@ -435,7 +446,7 @@ async function verify(which) {
     if (!(await marker(pool))) problems.push(`${target} has not been localised`);
 
     const unique = {
-      apex: [['dim_customer', 'customer_name'], ['dim_vendor', 'vendor_name']],
+      apex: [['dim_customer', 'customer_name'], ['dim_vendor', 'vendor_name'], ['dim_product_service', 'offering_name']],
       sales: [['doctors', 'doctor_name'], ['pharmacies', 'name'], ['sales_reps', 'name']],
       mfg: [['operators', 'name'], ['plants', 'plant_name'], ['production_lines', 'line_name'], ['suppliers', 'supplier_name']],
     }[which];
