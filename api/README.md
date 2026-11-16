@@ -60,13 +60,19 @@ Send the API key as `x-api-key`.
   `mfg_oee_dashboard`, `/api/doctors/{id}` is `sales_doctors_by_id`. Sales endpoints get a `sales_` prefix.
 - The per-table Apex endpoints are one tool, `apex_table`, with a `table` argument. `apex_tables` lists them.
 - `apex_table` also returns totals: `group_by` (any column, plus `business_unit`, `region`, `entity`, `department`
-  through `dim_organisation`, and `month`, `quarter`, `year`) and `metrics` (`count`, `distinct:<column>`,
+  through `dim_organisation`, `customer_name`, `vendor_name`, `offering_name` through their dimension tables, and
+  `month`, `quarter`, `year`) and `metrics` (`count`, `distinct:<column>`,
   `sum|avg|min|max:<numeric column>`) are computed in SQL over every matching row, sorted with `sort` (`-` for
   descending). Replies carry `rows_matched`, `groups_total` and `truncated` (more groups than `limit`, default 1000).
   `apex_tables` lists each table's filters, `group_by` columns and numeric `measures`. Unknown filters are rejected
   instead of ignored. On tables keyed by `month_id`, `date_id` or `quarter_id`, `from`/`to` cover whole months, days
   or quarters (`from=2026-03-15` on a monthly table includes all of March). For example, revenue and EBITDA by business unit for a year:
   `{"table":"serving-executive-scorecard-monthly","group_by":"business_unit","metrics":"sum:revenue,sum:ebitda","from":"2025-10-01","to":"2026-09-30"}`.
+- Without `group_by` or `metrics`, `apex_table` returns rows with `customer_name`, `vendor_name` and `offering_name`
+  next to their ids, so answers can name them. `select` narrows the columns, names included
+  (`select=customer_name,net_revenue`). The same names work as filters, for example `customer_name=Indus Power Limited`.
+- Every amount is in Pakistani rupees (PKR); Apex columns ending `_pkr_m` are PKR millions. The MCP server tells
+  clients so in its `instructions`. Data is localised by `init/localize_pkr.js` (see the header of that script).
 - `apex_chart` draws those totals as an image: `bar`, `horizontal_bar`, `stacked_bar`, `line`, `area`, `combo`, `pie`, `donut`, `heatmap`, `scatter`, `bubble`, `radar`, `histogram` or `waterfall`. It takes `apex_table`'s arguments plus `chart_type` and `title`;
   the first `group_by` column is usually the x axis and a second the series (or the heatmap's y axis); the tool description covers scatter, bubble,
   radar and histogram. The reply has `markdown` (the image), `data` (the real figures behind it: bins for a histogram, rows plus Total for a waterfall)
