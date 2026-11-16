@@ -413,7 +413,8 @@ const spec = {
     '/api/stats': {
       get: {
         tags: ['Sales - Analytics'],
-        summary: 'Row counts across core tables',
+        summary: 'Row counts across core tables, plus total sales value',
+        description: 'total_sales is the number of sales transactions. total_sales_value is their summed value_sold in PKR.',
         responses: {
           200: {
             description: 'Success',

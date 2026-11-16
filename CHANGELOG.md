@@ -19,6 +19,8 @@
   calculated from the data.
 
 ### Changed
+- `/api/stats` adds `total_sales_value`, the summed `value_sold` in PKR. `total_sales` stays the number of sales
+  transactions, so a "sales value" figure should read the new field.
 - Data is localised for Pakistan by `init/localize_pkr.js`: Apex and manufacturing amounts are in PKR (280 per USD),
   sales amounts are labelled PKR, and customers, vendors, offices, doctors, pharmacies, reps, plants, operators and
   suppliers have local names. Apex columns `*_usd` / `*_usd_m` are now `*_pkr` / `*_pkr_m`. Reports print `PKR 1.82B`.
