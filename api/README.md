@@ -49,7 +49,7 @@ npm run dev        # Development with nodemon
 - `GET /api/territory-coverage` — Territory summary
 
 ### Stats
-- `GET /api/stats` — Total record counts
+- `GET /api/stats` — Total record counts, plus `total_sales_value` (summed sales value in PKR; `total_sales` is the number of sales transactions)
 
 ## MCP Server
 
