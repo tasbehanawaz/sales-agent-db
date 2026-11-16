@@ -572,7 +572,8 @@ app.get('/api/stats', async (req, res) => {
         (SELECT COUNT(*) FROM dbo.products) as total_products,
         (SELECT COUNT(*) FROM dbo.pharmacies) as total_pharmacies,
         (SELECT COUNT(*) FROM dbo.call_planning) as total_calls,
-        (SELECT COUNT(*) FROM dbo.secondary_sales) as total_sales
+        (SELECT COUNT(*) FROM dbo.secondary_sales) as total_sales,
+        (SELECT ISNULL(SUM(value_sold), 0) FROM dbo.secondary_sales) as total_sales_value
     `);
     res.json({ success: true, data: stats[0] });
   } catch (err) {
