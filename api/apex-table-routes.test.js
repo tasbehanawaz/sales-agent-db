@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { TABLES, tableFilters, aggregation, organisation } = require('./apex-table-routes');
+const { TABLES, tableFilters, aggregation, organisation, selectClause } = require('./apex-table-routes');
 
 test('from/to use the period key of tables without a date column', () => {
   const scorecard = tableFilters(TABLES['serving-executive-scorecard-monthly'], { from: '2025-10-01', to: '2026-09-30' }, {});
@@ -44,4 +44,23 @@ test('aggregation totals in SQL with float averages and validated names', () => 
   assert.ok(aggregation(close, { group_by: 'constructor' }).error, 'Object.prototype names are not columns');
   assert.ok(aggregation(close, { metrics: 'distinct:toString' }).error);
   assert.deepEqual(aggregation(close, { group_by: 'status,status', metrics: 'count,count' }).metrics, ['count'], 'repeated names are dropped');
+});
+
+test('selectClause narrows non-aggregate reads to named columns', () => {
+  const customer = TABLES['dim-customer'];
+  assert.equal(selectClause(customer).sql, 't.*', 'omitted select defaults to every column');
+  assert.equal(selectClause(customer, '').sql, 't.*', 'empty select defaults to every column');
+  assert.equal(
+    selectClause(customer, 'customer_id,customer_name').sql,
+    't.[customer_id], t.[customer_name]',
+    'validated columns are bracket-quoted and comma-joined',
+  );
+  assert.equal(
+    selectClause(customer, 'customer_id, customer_name , customer_id').sql,
+    't.[customer_id], t.[customer_name]',
+    'whitespace is trimmed and duplicates are dropped (via list)',
+  );
+  assert.ok(selectClause(customer, 'nope').error, 'unknown column is rejected');
+  assert.ok(selectClause(customer, 'constructor').error, 'Object.prototype names are not columns');
+  assert.ok(selectClause(customer, 'customer_id,nope').error, 'any unknown column rejects the whole clause');
 });

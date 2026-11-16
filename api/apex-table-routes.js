@@ -160,7 +160,7 @@ function tableFilters(spec, q, params) {
   return { clauses, params, join };
 }
 
-const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort'];
+const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort', 'select'];
 
 function unknownParams(spec, q) {
   const known = new Set([...CONTROL_PARAMS, ...(spec.dateColumn ? ['from', 'to'] : []), ...spec.filters.map((f) => f.param), ...organisation(spec).names]);
@@ -174,6 +174,19 @@ function list(value) {
 // Object.hasOwn, so names such as "constructor" are not mistaken for columns.
 function columnKind(spec, name) {
   return Object.hasOwn(spec.columns, name) ? spec.columns[name] : null;
+}
+
+// Comma-separated columns to project in the non-aggregate path. Omitted or
+// empty -> t.* (every column). Each name is validated against the table's
+// whitelist so bad names (and SQL injection) can't reach the SELECT.
+function selectClause(spec, raw) {
+  const cols = list(raw);
+  if (!cols.length) return { sql: 't.*' };
+  const unknown = cols.filter((c) => !Object.hasOwn(spec.columns, c));
+  if (unknown.length) {
+    return { error: `${unknown.join(', ')} is not a column of ${spec.table}. Valid columns: ${Object.keys(spec.columns).join(', ')}` };
+  }
+  return { sql: cols.map((c) => `t.[${c}]`).join(', ') };
 }
 
 /**
@@ -265,7 +278,9 @@ function handler(key) {
       const from = `${source(spec.table)} t ${filters.join || (agg && agg.join) || ''} ${whereSql(filters.clauses)}`;
 
       if (!agg) {
-        const data = await query(`SELECT TOP (@limit) t.* FROM ${from} ORDER BY t.[${spec.orderBy}] ${spec.orderDir}`, filters.params);
+        const sel = selectClause(spec, req.query.select);
+        if (sel.error) return res.status(400).json({ success: false, error: sel.error });
+        const data = await query(`SELECT TOP (@limit) ${sel.sql} FROM ${from} ORDER BY t.[${spec.orderBy}] ${spec.orderDir}`, filters.params);
         return res.json({ success: true, count: data.length, table: spec.table, rows_in_database: spec.rows, data });
       }
 
@@ -295,4 +310,4 @@ function handler(key) {
   };
 }
 
-module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation };
+module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation, selectClause };
