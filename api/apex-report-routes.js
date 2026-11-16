@@ -494,7 +494,7 @@ const SECTIONS = {
       table: {
         headers: ['Segment', 'Customers', 'Revenue', 'GM %', 'Avg DSO', 'Disputes', 'SLA Breaches', 'Credit Notes', 'Service Health'],
         rows: rows.map((r) => [r.segment, count(r.customers), money(r.revenue), share(r.margin, r.revenue), dec(r.dso),
-          count(r.disputes), count(r.sla), count(r.credit_notes), dec(r.health)]),
+          count(r.disputes), count(r.sla), money(r.credit_notes), dec(r.health)]),
         weights: [1.5, 1, 1.1, 0.8, 0.9, 0.9, 1, 1, 1.1],
       },
       bullets: [`${count(dim.active)} active customers; ${count(dim.south)} flagged for South-region concentration`],

@@ -89,6 +89,22 @@ const FINDINGS = {
   'Vendor Master': ['Vendor bank details changed without callback', 'Inactive vendors not blocked', 'Duplicate vendor records'],
 };
 
+// Apex offerings, ten per business unit, in offering_id order.
+const OFFERINGS = {
+  'Consumer Markets': ['Desi Ghee Classic', 'Chai Patti Premium', 'Basmati Rice Gold', 'Mango Nectar', 'Spice Mix Range',
+    'Lawn Fabric Collection', 'Home Care Detergent', 'Bottled Mineral Water', 'UHT Milk Pack', 'Snack Biscuits Range'],
+  'Digital Products': ['Mobile Wallet Platform', 'E-commerce Storefront', 'Digital Payments Gateway', 'Customer Mobile App', 'Cloud Analytics Suite',
+    'Online Learning Portal', 'Telehealth Platform', 'Digital Marketing Suite', 'Loyalty and Rewards App', 'API Integration Hub'],
+  'Enterprise Solutions': ['ERP Implementation', 'Cloud Migration', 'Systems Integration', 'Cybersecurity Advisory', 'Data Warehouse Build',
+    'CRM Rollout', 'IT Strategy Consulting', 'Network Modernisation', 'Core Banking Integration', 'Enterprise Licensing'],
+  'Industrial Operations': ['Cement Bags (50 kg)', 'Steel Rebar', 'PVC Pipes', 'Industrial Valves', 'Electric Motors',
+    'Packaging Film', 'Fertiliser Blend', 'Cotton Yarn', 'Distribution Transformers', 'Solar Panels'],
+  'Managed Services': ['Managed IT Support', 'Network Operations Centre', 'Data Centre Hosting', 'Managed Security Service', 'Field Maintenance Contract',
+    'Facility Management', 'Fleet Management', 'Backup and Recovery', 'Helpdesk Outsourcing', 'Payroll Processing'],
+  'Shared Services': ['Finance and Accounting Services', 'HR Shared Services', 'Procurement Services', 'Legal and Compliance Services', 'Internal Audit Services',
+    'Treasury Services', 'Tax Advisory', 'Training and Development', 'Document Management', 'Contact Centre'],
+};
+
 // Apex legal entities: one holding company and one services company per region.
 const APEX_ENTITIES = {
   ENT001: { entity: 'Apex North Holdings', location: 'Islamabad' },
@@ -233,6 +249,6 @@ function choose(list, key) {
 }
 
 module.exports = {
-  FINDINGS, APEX_ENTITIES, SALES_CITIES, PLANTS, SUPPLIERS,
+  FINDINGS, OFFERINGS, APEX_ENTITIES, SALES_CITIES, PLANTS, SUPPLIERS,
   customerPicker, vendorPicker, personPicker, hospitalPicker, pharmacyPicker, choose,
 };
