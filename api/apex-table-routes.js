@@ -84,15 +84,16 @@ const NAMED = [
 function named(spec) {
   return NAMED.filter((n) => spec.columns[n.id] && !spec.columns[n.name]).map((n) => ({
     name: n.name,
+    from: n.table,
     expr: `${n.alias}.[${n.name}]`,
     join: `LEFT JOIN ${source(n.table)} ${n.alias} ON ${n.alias}.[${n.id}] = t.[${n.id}]`,
   }));
 }
 
-/** Every column reached through a join: { name, expr, join }. */
+/** Every column reached through a join: { name, from, expr, join }. */
 function related(spec) {
   const org = organisation(spec);
-  return [...org.names.map((name) => ({ name, expr: `o.[${name}]`, join: org.join })), ...named(spec)];
+  return [...org.names.map((name) => ({ name, from: 'dim_organisation', expr: `o.[${name}]`, join: org.join })), ...named(spec)];
 }
 
 function relatedColumn(spec, name) {

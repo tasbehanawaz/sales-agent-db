@@ -197,14 +197,14 @@ const spec = {
     },
     '/api/pharmacies': { get: commonListPath('List pharmacies', 'Return pharmacies.', 'Sales - Core') },
     '/api/call-planning': {
-      get: commonListPath('List call planning entries', 'Filterable planned/actual calls.', 'Sales - Core', [
+      get: commonListPath('List call planning entries', 'Filterable planned/actual calls, each with doctor_name, rep_name, sku and brand.', 'Sales - Core', [
         { in: 'query', name: 'region', schema: { type: 'string' } },
         { in: 'query', name: 'rep_id', schema: { type: 'string' } },
         ...dateRangeParams,
       ]),
     },
     '/api/secondary-sales': {
-      get: commonListPath('List secondary sales', 'Filterable secondary sales rows.', 'Sales - Core', [
+      get: commonListPath('List secondary sales', 'Filterable secondary sales rows, each with pharmacy_name, rep_name, sku and brand. value_sold is in PKR.', 'Sales - Core', [
         { in: 'query', name: 'sku', schema: { type: 'string' } },
         { in: 'query', name: 'region', schema: { type: 'string' } },
         ...dateRangeParams,
@@ -1201,12 +1201,13 @@ const spec = {
 };
 
 const { TABLES: apexTableCatalog } = require('./apex-table-catalog');
-const { organisation: apexOrganisation } = require('./apex-table-routes');
+const { related: apexRelated } = require('./apex-table-routes');
 
 const apexAggregateParams = [
-  { in: 'query', name: 'group_by', schema: { type: 'string' }, description: 'Comma-separated columns to total by, e.g. business_unit,month. Also region, entity, department (from dim_organisation) and month, quarter, year (from the date column).' },
+  { in: 'query', name: 'group_by', schema: { type: 'string' }, description: 'Comma-separated columns to total by, e.g. business_unit,month. Also region, entity, department (from dim_organisation), customer_name, vendor_name, offering_name (on tables with that id) and month, quarter, year (from the date column).' },
   { in: 'query', name: 'metrics', schema: { type: 'string' }, description: 'Comma-separated totals: count, distinct:<column>, sum|avg|min|max:<numeric column>, e.g. sum:revenue,avg:late_flag. Defaults to count when group_by is set.' },
   { in: 'query', name: 'sort', schema: { type: 'string' }, description: 'Group or metric name to sort by; prefix with - for descending, e.g. -sum_revenue.' },
+  { in: 'query', name: 'select', schema: { type: 'string' }, description: 'Comma-separated columns to return when there is no group_by or metrics, including the joined names, e.g. customer_name,net_revenue. Omit for every column.' },
 ];
 
 spec.paths['/api/apex/tables'] = {
@@ -1222,6 +1223,12 @@ spec.paths['/api/apex/tables'] = {
   },
 };
 
+// "Rows carry customer_name." for tables joined to a name, so readers quote names, not ids.
+function names(table) {
+  const joined = apexRelated(table).filter((r) => r.from !== 'dim_organisation').map((r) => r.name);
+  return joined.length ? ` Rows carry ${joined.join(' and ')}.` : '';
+}
+
 for (const [key, table] of Object.entries(apexTableCatalog)) {
   const parameters = [
     { in: 'query', name: 'limit', schema: { type: 'integer', default: table.defaultLimit, maximum: table.maxLimit } },
@@ -1233,8 +1240,8 @@ for (const [key, table] of Object.entries(apexTableCatalog)) {
     if (filter.kind === 'date' || filter.kind === 'date-from' || filter.kind === 'date-to') schema.format = 'date';
     parameters.push({ in: 'query', name: filter.param, schema });
   }
-  for (const name of apexOrganisation(table).names) {
-    parameters.push({ in: 'query', name, schema: { type: 'string' }, description: 'From dim_organisation' });
+  for (const r of apexRelated(table)) {
+    parameters.push({ in: 'query', name: r.name, schema: { type: 'string' }, description: 'From ' + r.from });
   }
   parameters.push(...apexAggregateParams);
   spec.paths['/api/apex/tables/' + key] = {
@@ -1242,7 +1249,8 @@ for (const [key, table] of Object.entries(apexTableCatalog)) {
       tags: ['Apex Group'],
       summary: table.table,
       description: table.rows + ' rows in ' + table.table + '.' + (table.dateColumn ? ' from and to filter ' + table.dateColumn + '.' : '') +
-        ' With group_by or metrics, returns totals computed over every matching row instead of rows.',
+        ' With group_by or metrics, returns totals computed over every matching row instead of rows.' +
+        names(table),
       parameters,
       responses: {
         200: { description: 'Table rows', content: { 'application/json': { schema: successEnvelope({ type: 'array', items: { type: 'object', additionalProperties: true } }) } } },
