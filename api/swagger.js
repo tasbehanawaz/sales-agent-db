@@ -52,7 +52,7 @@ const spec = {
     title: 'Sales & Manufacturing Agent API',
     version: '1.0.0',
     description:
-      'REST API for the Sales Agent, Manufacturing Agent, and Apex Group databases. All `/api/*` endpoints require an `x-api-key` header.',
+      'REST API for the Sales Agent, Manufacturing Agent, and Apex Group databases. All `/api/*` endpoints require an `x-api-key` header. All amounts are in Pakistani rupees (PKR).',
     contact: { name: 'Sales Agent API' },
     license: { name: 'MIT' },
   },
@@ -713,7 +713,7 @@ const spec = {
                       items: {
                         type: 'object',
                         properties: {
-                          label: { type: 'string', example: 'Dubai Manufacturing', description: 'Plant, failure mode, or line name' },
+                          label: { type: 'string', example: 'Quetta Manufacturing', description: 'Plant, failure mode, or line name' },
                           plant_name: { type: 'string', description: 'Present when group_by is line' },
                           month: { type: 'string', example: '2025-07', description: 'Present for plant_month and failure_mode_month' },
                           event_count: { type: 'integer', example: 173 },
@@ -774,7 +774,7 @@ const spec = {
                       items: {
                         type: 'object',
                         properties: {
-                          label: { type: 'string', example: 'Tokyo Manufacturing' },
+                          label: { type: 'string', example: 'Islamabad Manufacturing' },
                           run_count: { type: 'integer' },
                           avg_good: { type: 'number', example: 14891 },
                           attainment_pct: { type: 'number', example: 94.4 },
@@ -1022,10 +1022,11 @@ const spec = {
       get: {
         tags: ['Apex Group'],
         summary: 'Customer churn, renewal, and cash exposure',
-        description: 'Highest revenue-at-risk customers first. Optional filters: risk_band, customer_id, from, to, limit. from and to apply to forecast_month.',
+        description: 'Highest revenue-at-risk customers first, each with its customer_name. Optional filters: risk_band, customer_id, customer_name, from, to, limit. from and to apply to forecast_month.',
         parameters: [
           { in: 'query', name: 'risk_band', schema: { type: 'string' } },
           { in: 'query', name: 'customer_id', schema: { type: 'string' } },
+          { in: 'query', name: 'customer_name', schema: { type: 'string' } },
           { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },
           ...dateRangeParams,
         ],
@@ -1145,9 +1146,10 @@ const spec = {
       get: {
         tags: ['Apex Group'],
         summary: 'Receivables totals plus the most overdue invoices',
-        description: 'Summary covers every matching invoice. Optional filters: customer_id, collection_status, dispute (0 or 1), from, to, limit.',
+        description: 'Summary covers every matching invoice; each invoice carries its customer_name. Optional filters: customer_id, customer_name, collection_status, dispute (0 or 1), from, to, limit.',
         parameters: [
           { in: 'query', name: 'customer_id', schema: { type: 'string' } },
+          { in: 'query', name: 'customer_name', schema: { type: 'string' } },
           { in: 'query', name: 'collection_status', schema: { type: 'string' } },
           { in: 'query', name: 'dispute', schema: { type: 'integer', enum: [0, 1] } },
           { in: 'query', name: 'limit', schema: { type: 'integer', default: 100, maximum: 1000 } },

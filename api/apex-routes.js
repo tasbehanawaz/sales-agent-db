@@ -87,17 +87,19 @@ async function getCustomerRisk(req, res) {
     const limit = intParam(req.query.limit, 100, 1, 1000);
     const params = { limit };
     const clauses = [];
-    addFilter(clauses, params, 'risk_band', 'risk_band = @risk_band', strParam(req.query.risk_band));
-    addFilter(clauses, params, 'customer_id', 'customer_id = @customer_id', strParam(req.query.customer_id));
+    addFilter(clauses, params, 'risk_band', 'r.risk_band = @risk_band', strParam(req.query.risk_band));
+    addFilter(clauses, params, 'customer_id', 'r.customer_id = @customer_id', strParam(req.query.customer_id));
+    addFilter(clauses, params, 'customer_name', 'c.customer_name = @customer_name', strParam(req.query.customer_name));
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
-    if (fromDate) addFilter(clauses, params, 'from_date', 'forecast_month >= @from_date', fromDate);
-    if (toDate) addFilter(clauses, params, 'to_date', 'forecast_month <= @to_date', toDate);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'r.forecast_month >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'r.forecast_month <= @to_date', toDate);
 
     const data = await query(
-      `SELECT TOP (@limit) * FROM ${table('pred_customer_risk')}
+      `SELECT TOP (@limit) r.*, c.customer_name FROM ${table('pred_customer_risk')} r
+       LEFT JOIN ${table('dim_customer')} c ON c.customer_id = r.customer_id
        ${whereSql(clauses)}
-       ORDER BY revenue_at_risk DESC`,
+       ORDER BY r.revenue_at_risk DESC`,
       params
     );
     res.json({ success: true, count: data.length, data });
@@ -262,29 +264,31 @@ async function getReceivables(req, res) {
     const limit = intParam(req.query.limit, 100, 1, 1000);
     const params = { limit };
     const clauses = [];
-    addFilter(clauses, params, 'customer_id', 'customer_id = @customer_id', strParam(req.query.customer_id));
-    addFilter(clauses, params, 'collection_status', 'collection_status = @collection_status', strParam(req.query.collection_status));
+    addFilter(clauses, params, 'customer_id', 'a.customer_id = @customer_id', strParam(req.query.customer_id));
+    addFilter(clauses, params, 'customer_name', 'c.customer_name = @customer_name', strParam(req.query.customer_name));
+    addFilter(clauses, params, 'collection_status', 'a.collection_status = @collection_status', strParam(req.query.collection_status));
     const dispute = flagParam(req.query.dispute);
-    if (dispute != null) addFilter(clauses, params, 'dispute_flag', 'dispute_flag = @dispute_flag', dispute);
+    if (dispute != null) addFilter(clauses, params, 'dispute_flag', 'a.dispute_flag = @dispute_flag', dispute);
     const fromDate = dateParam(req.query.from);
     const toDate = dateParam(req.query.to);
-    if (fromDate) addFilter(clauses, params, 'from_date', 'invoice_date >= @from_date', fromDate);
-    if (toDate) addFilter(clauses, params, 'to_date', 'invoice_date <= @to_date', toDate);
+    if (fromDate) addFilter(clauses, params, 'from_date', 'a.invoice_date >= @from_date', fromDate);
+    if (toDate) addFilter(clauses, params, 'to_date', 'a.invoice_date <= @to_date', toDate);
     const where = whereSql(clauses);
+    const from = `${table('fact_ar_invoice_payment')} a LEFT JOIN ${table('dim_customer')} c ON c.customer_id = a.customer_id`;
 
     const summaryRows = await query(
       `SELECT COUNT(*) AS invoices,
-              SUM(outstanding_amount) AS outstanding_amount,
-              SUM(CASE WHEN dispute_flag = 1 THEN 1 ELSE 0 END) AS disputed_invoices,
-              AVG(CAST(days_past_due AS float)) AS avg_days_past_due
-       FROM ${table('fact_ar_invoice_payment')}
+              SUM(a.outstanding_amount) AS outstanding_amount,
+              SUM(CASE WHEN a.dispute_flag = 1 THEN 1 ELSE 0 END) AS disputed_invoices,
+              AVG(CAST(a.days_past_due AS float)) AS avg_days_past_due
+       FROM ${from}
        ${where}`,
       params
     );
     const data = await query(
-      `SELECT TOP (@limit) * FROM ${table('fact_ar_invoice_payment')}
+      `SELECT TOP (@limit) a.*, c.customer_name FROM ${from}
        ${where}
-       ORDER BY days_past_due DESC, outstanding_amount DESC`,
+       ORDER BY a.days_past_due DESC, a.outstanding_amount DESC`,
       params
     );
     res.json({ success: true, count: data.length, summary: summaryRows[0] || {}, data });

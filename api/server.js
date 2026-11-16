@@ -136,18 +136,18 @@ app.get('/api/call-planning', async (req, res) => {
     const region = strParam(req.query.region);
     const params = { limit };
     const clauses = [];
-    let fromSql = 'FROM dbo.call_planning cp';
+    const fromSql = `FROM dbo.call_planning cp
+      LEFT JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id
+      LEFT JOIN dbo.sales_reps r ON cp.rep_id = r.rep_id
+      LEFT JOIN dbo.products p ON cp.product_id = p.product_id`;
 
-    if (region) {
-      fromSql += ' JOIN dbo.doctors d ON cp.doctor_id = d.doctor_id';
-      addFilter(clauses, params, 'region', 'd.region = @region', region);
-    }
+    addFilter(clauses, params, 'region', 'd.region = @region', region);
     addFilter(clauses, params, 'rep_id', 'cp.rep_id = @rep_id', strParam(req.query.rep_id));
     addFilter(clauses, params, 'from_date', 'cp.planned_date >= @from_date', dateParam(req.query.from));
     addFilter(clauses, params, 'to_date', 'cp.planned_date <= @to_date', dateParam(req.query.to));
 
     const data = await query(
-      `SELECT TOP (@limit) cp.* ${fromSql} ${whereSql(clauses)} ORDER BY cp.planned_date DESC`,
+      `SELECT TOP (@limit) cp.*, d.doctor_name, r.name AS rep_name, p.sku, p.brand ${fromSql} ${whereSql(clauses)} ORDER BY cp.planned_date DESC`,
       params
     );
     res.json({ success: true, count: data.length, data });
@@ -162,18 +162,18 @@ app.get('/api/secondary-sales', async (req, res) => {
     const sku = strParam(req.query.sku);
     const params = { limit };
     const clauses = [];
-    let fromSql = 'FROM dbo.secondary_sales ss';
+    const fromSql = `FROM dbo.secondary_sales ss
+      LEFT JOIN dbo.products p ON ss.product_id = p.product_id
+      LEFT JOIN dbo.pharmacies ph ON ss.pharmacy_id = ph.pharmacy_id
+      LEFT JOIN dbo.sales_reps r ON ss.rep_id = r.rep_id`;
 
-    if (sku) {
-      fromSql += ' JOIN dbo.products p ON ss.product_id = p.product_id';
-      addFilter(clauses, params, 'sku', 'p.sku = @sku', sku);
-    }
+    addFilter(clauses, params, 'sku', 'p.sku = @sku', sku);
     addFilter(clauses, params, 'region', 'ss.region = @region', strParam(req.query.region));
     addFilter(clauses, params, 'from_date', 'ss.sale_date >= @from_date', dateParam(req.query.from));
     addFilter(clauses, params, 'to_date', 'ss.sale_date <= @to_date', dateParam(req.query.to));
 
     const data = await query(
-      `SELECT TOP (@limit) ss.* ${fromSql} ${whereSql(clauses)} ORDER BY ss.sale_date DESC`,
+      `SELECT TOP (@limit) ss.*, p.sku, p.brand, ph.name AS pharmacy_name, r.name AS rep_name ${fromSql} ${whereSql(clauses)} ORDER BY ss.sale_date DESC`,
       params
     );
     res.json({ success: true, count: data.length, data });

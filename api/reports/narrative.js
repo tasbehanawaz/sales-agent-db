@@ -4,16 +4,19 @@
  * Section builders may supply their own `narrative` paragraphs. Every section
  * also gets paragraphs derived from its table: which row leads and trails on
  * the main measure, how concentrated it is, and the range of a rate column.
- * Table cells are the formatted strings the builders produce ("$1.82B",
+ * Table cells are the formatted strings the builders produce ("PKR 1.82B",
  * "43.4%", "1,234"), so they are parsed back into numbers here.
  */
 
-const SCALE = { K: 1e3, M: 1e6, B: 1e9 };
+const { CURRENCY } = require('./format');
 
-/** "$1.82B" → { value: 1.82e9, kind: 'money' }; "43.4%" → { value: 43.4, kind: 'rate' } */
+const SCALE = { K: 1e3, M: 1e6, B: 1e9 };
+const MONEY = new RegExp(`^${CURRENCY} (-?)([\\d,]+(?:\\.\\d+)?)([KMB])?$`);
+
+/** "PKR 1.82B" → { value: 1.82e9, kind: 'money' }; "43.4%" → { value: 43.4, kind: 'rate' } */
 function parseCell(cell) {
   const s = String(cell ?? '').trim().replace(/ \*$/, '');
-  let m = s.match(/^(-?)\$([\d,]+(?:\.\d+)?)([KMB])?$/);
+  let m = s.match(MONEY);
   if (m) return { value: (m[1] ? -1 : 1) * parseFloat(m[2].replace(/,/g, '')) * (SCALE[m[3]] || 1), kind: 'money' };
   m = s.match(/^(-?[\d,]+(?:\.\d+)?)%$/);
   if (m) return { value: parseFloat(m[1].replace(/,/g, '')), kind: 'rate' };

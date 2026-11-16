@@ -73,6 +73,37 @@ function organisation(spec) {
   return { names: [], join: '' };
 }
 
+// Customer, vendor and offering names come from their dimension table, so an answer can
+// name a customer instead of quoting CUST00001. Plain rows carry the name next to the id.
+const NAMED = [
+  { id: 'customer_id', table: 'dim_customer', alias: 'c', name: 'customer_name' },
+  { id: 'vendor_id', table: 'dim_vendor', alias: 'v', name: 'vendor_name' },
+  { id: 'offering_id', table: 'dim_product_service', alias: 'ps', name: 'offering_name' },
+];
+
+function named(spec) {
+  return NAMED.filter((n) => spec.columns[n.id] && !spec.columns[n.name]).map((n) => ({
+    name: n.name,
+    expr: `${n.alias}.[${n.name}]`,
+    join: `LEFT JOIN ${source(n.table)} ${n.alias} ON ${n.alias}.[${n.id}] = t.[${n.id}]`,
+  }));
+}
+
+/** Every column reached through a join: { name, expr, join }. */
+function related(spec) {
+  const org = organisation(spec);
+  return [...org.names.map((name) => ({ name, expr: `o.[${name}]`, join: org.join })), ...named(spec)];
+}
+
+function relatedColumn(spec, name) {
+  return related(spec).find((r) => r.name === name) || null;
+}
+
+/** One JOIN per line, each dimension joined once however many filters or columns need it. */
+function joins(list) {
+  return [...new Set(list.filter(Boolean).flatMap((j) => j.split('\n')))].join('\n');
+}
+
 function flagParam(value) {
   const s = strParam(value);
   if (s == null) return null;
@@ -83,17 +114,17 @@ function flagParam(value) {
 
 function listTables(req, res) {
   const data = Object.entries(TABLES).map(([key, table]) => {
-    const org = organisation(table);
+    const extra = related(table).map((r) => r.name);
     const columns = Object.entries(table.columns);
     return {
       endpoint: '/api/apex/tables/' + key,
       table: key,
       rows: table.rows,
       date_filter: table.dateColumn,
-      filters: [...table.filters.map((f) => f.param), ...org.names],
+      filters: [...table.filters.map((f) => f.param), ...extra],
       group_by: [
         ...columns.filter(([, kind]) => kind !== 'number').map(([name]) => name),
-        ...org.names,
+        ...extra,
         ...(table.dateColumn ? Object.keys(period(table)).filter((p) => ['month', 'quarter', 'year'].includes(p)) : []),
       ],
       measures: columns.filter(([, kind]) => kind === 'number').map(([name]) => name),
@@ -105,11 +136,11 @@ function listTables(req, res) {
 /**
  * Build the WHERE clauses for one table from request query values.
  * Returns { clauses, params, join } or { error } for a value of the wrong type.
- * Table columns are qualified with alias t; organisation columns with alias o.
+ * Table columns are qualified with alias t; joined columns with their table's alias.
  */
 function tableFilters(spec, q, params) {
   const clauses = [];
-  let join = '';
+  const join = [];
 
   const p = period(spec);
   if (p) {
@@ -149,21 +180,20 @@ function tableFilters(spec, q, params) {
     }
   }
 
-  const org = organisation(spec);
-  for (const name of org.names) {
-    const value = strParam(q[name]);
+  for (const r of related(spec)) {
+    const value = strParam(q[r.name]);
     if (value == null) continue;
-    addFilter(clauses, params, name, `o.[${name}] = @${name}`, value);
-    join = org.join;
+    addFilter(clauses, params, r.name, `${r.expr} = @${r.name}`, value);
+    join.push(r.join);
   }
 
-  return { clauses, params, join };
+  return { clauses, params, join: joins(join) };
 }
 
 const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort', 'select'];
 
 function unknownParams(spec, q) {
-  const known = new Set([...CONTROL_PARAMS, ...(spec.dateColumn ? ['from', 'to'] : []), ...spec.filters.map((f) => f.param), ...organisation(spec).names]);
+  const known = new Set([...CONTROL_PARAMS, ...(spec.dateColumn ? ['from', 'to'] : []), ...spec.filters.map((f) => f.param), ...related(spec).map((r) => r.name)]);
   return Object.keys(q).filter((name) => !known.has(name));
 }
 
@@ -177,16 +207,22 @@ function columnKind(spec, name) {
 }
 
 // Comma-separated columns to project in the non-aggregate path. Omitted or
-// empty -> t.* (every column). Each name is validated against the table's
-// whitelist so bad names (and SQL injection) can't reach the SELECT.
+// empty -> every column plus the customer, vendor and offering names. Each name
+// is validated against the table's whitelist or its joined names, so bad names
+// (and SQL injection) can't reach the SELECT. Returns { sql, join } or { error }.
 function selectClause(spec, raw) {
   const cols = list(raw);
-  if (!cols.length) return { sql: 't.*' };
-  const unknown = cols.filter((c) => !Object.hasOwn(spec.columns, c));
+  const names = named(spec);
+  const picked = cols.length ? cols.map((c) => names.find((n) => n.name === c) || c) : ['*', ...names];
+  const unknown = cols.filter((c) => !Object.hasOwn(spec.columns, c) && !names.some((n) => n.name === c));
   if (unknown.length) {
-    return { error: `${unknown.join(', ')} is not a column of ${spec.table}. Valid columns: ${Object.keys(spec.columns).join(', ')}` };
+    const valid = [...Object.keys(spec.columns), ...names.map((n) => n.name)];
+    return { error: `${unknown.join(', ')} is not a column of ${spec.table}. Valid columns: ${valid.join(', ')}` };
   }
-  return { sql: cols.map((c) => `t.[${c}]`).join(', ') };
+  return {
+    sql: picked.map((p) => (typeof p === 'string' ? (p === '*' ? 't.*' : `t.[${p}]`) : `${p.expr} AS [${p.name}]`)).join(', '),
+    join: joins(picked.filter((p) => typeof p !== 'string').map((p) => p.join)),
+  };
 }
 
 /**
@@ -198,15 +234,15 @@ function aggregation(spec, q) {
   const metrics = list(q.metrics);
   if (!groupBy.length && !metrics.length) return null;
 
-  const org = organisation(spec);
   const p = period(spec);
-  let join = '';
+  const join = [];
   const groups = [];
   for (const name of groupBy) {
+    const joined = relatedColumn(spec, name);
     if (columnKind(spec, name)) groups.push({ alias: name, expr: `t.[${name}]` });
-    else if (org.names.includes(name)) {
-      groups.push({ alias: name, expr: `o.[${name}]` });
-      join = org.join;
+    else if (joined) {
+      groups.push({ alias: name, expr: joined.expr });
+      join.push(joined.join);
     } else if (p && p[name] && ['month', 'quarter', 'year'].includes(name)) {
       groups.push({ alias: name, expr: p[name](`t.[${spec.dateColumn}]`), period: true });
     } else {
@@ -221,9 +257,10 @@ function aggregation(spec, q) {
       continue;
     }
     const [fn, column] = metric.split(':');
-    if (fn === 'distinct' && (columnKind(spec, column) || org.names.includes(column))) {
-      const expr = columnKind(spec, column) ? `t.[${column}]` : `o.[${column}]`;
-      if (!columnKind(spec, column)) join = org.join;
+    const joined = relatedColumn(spec, column);
+    if (fn === 'distinct' && (columnKind(spec, column) || joined)) {
+      const expr = columnKind(spec, column) ? `t.[${column}]` : joined.expr;
+      if (!columnKind(spec, column)) join.push(joined.join);
       selects.push({ alias: `distinct_${column}`, expr: `COUNT(DISTINCT ${expr})` });
     } else if (['sum', 'avg', 'min', 'max'].includes(fn) && columnKind(spec, column) === 'number') {
       selects.push({ alias: `${fn}_${column}`, expr: `ROUND(${fn.toUpperCase()}(CAST(t.[${column}] AS float)), 4)` });
@@ -248,7 +285,7 @@ function aggregation(spec, q) {
   }
 
   return {
-    join,
+    join: joins(join),
     select: [...groups, ...selects].map((c) => `${c.expr} AS [${c.alias}]`).join(', '),
     groupBy: groups.length ? 'GROUP BY ' + groups.map((g) => g.expr).join(', ') : '',
     order,
@@ -263,7 +300,7 @@ function handler(key) {
     try {
       const unknown = unknownParams(spec, req.query);
       if (unknown.length) {
-        const valid = [...spec.filters.map((f) => f.param), ...organisation(spec).names];
+        const valid = [...spec.filters.map((f) => f.param), ...related(spec).map((r) => r.name)];
         return res.status(400).json({
           success: false,
           error: `${unknown.join(', ')} is not a filter of ${key}. Valid filters: ${valid.join(', ') || 'none'}`,
@@ -275,11 +312,11 @@ function handler(key) {
       const limit = agg ? intParam(req.query.limit, AGGREGATE_LIMIT, 1, AGGREGATE_LIMIT) : intParam(req.query.limit, spec.defaultLimit, 1, spec.maxLimit);
       const filters = tableFilters(spec, req.query, { limit });
       if (filters.error) return res.status(400).json({ success: false, error: filters.error });
-      const from = `${source(spec.table)} t ${filters.join || (agg && agg.join) || ''} ${whereSql(filters.clauses)}`;
+      const sel = agg ? null : selectClause(spec, req.query.select);
+      if (sel && sel.error) return res.status(400).json({ success: false, error: sel.error });
+      const from = `${source(spec.table)} t ${joins([filters.join, agg && agg.join, sel && sel.join])} ${whereSql(filters.clauses)}`;
 
       if (!agg) {
-        const sel = selectClause(spec, req.query.select);
-        if (sel.error) return res.status(400).json({ success: false, error: sel.error });
         const data = await query(`SELECT TOP (@limit) ${sel.sql} FROM ${from} ORDER BY t.[${spec.orderBy}] ${spec.orderDir}`, filters.params);
         return res.json({ success: true, count: data.length, table: spec.table, rows_in_database: spec.rows, data });
       }
@@ -310,4 +347,4 @@ function handler(key) {
   };
 }
 
-module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation, selectClause };
+module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation, related, selectClause, joins };
