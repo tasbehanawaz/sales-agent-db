@@ -191,7 +191,7 @@ function tableFilters(spec, q, params) {
   return { clauses, params, join: joins(join) };
 }
 
-const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort', 'select'];
+const CONTROL_PARAMS = ['limit', 'group_by', 'metrics', 'sort', 'select', 'lean'];
 
 function unknownParams(spec, q) {
   const known = new Set([...CONTROL_PARAMS, ...(spec.dateColumn ? ['from', 'to'] : []), ...spec.filters.map((f) => f.param), ...related(spec).map((r) => r.name)]);
@@ -205,6 +205,16 @@ function list(value) {
 // Object.hasOwn, so names such as "constructor" are not mistaken for columns.
 function columnKind(spec, name) {
   return Object.hasOwn(spec.columns, name) ? spec.columns[name] : null;
+}
+
+// lean=1 strips diagnostic fields the agent doesn't read (count, table,
+// rows_in_database, rows_matched, groups_total, group_by, metrics), keeping
+// only success, data and (on aggregate reads) truncated. The loopback REST
+// endpoint stays verbose by default so dashboards and curl callers are
+// unaffected; MCP's apex_table runner sets lean=1 so the agent pays less.
+function wantsLean(q) {
+  const v = strParam(q.lean);
+  return v === '1' || v === 'true';
 }
 
 // Comma-separated columns to project in the non-aggregate path. Omitted or
@@ -319,6 +329,7 @@ function handler(key) {
 
       if (!agg) {
         const data = await query(`SELECT TOP (@limit) ${sel.sql} FROM ${from} ORDER BY t.[${spec.orderBy}] ${spec.orderDir}`, filters.params);
+        if (wantsLean(req.query)) return res.json({ success: true, data });
         return res.json({ success: true, count: data.length, table: spec.table, rows_in_database: spec.rows, data });
       }
 
@@ -330,6 +341,8 @@ function handler(key) {
       const rowsMatched = rows.length ? rows[0]._rows_matched : 0;
       const groups = rows.length ? rows[0]._groups : 0;
       const data = rows.map(({ _rows_matched, _groups, ...row }) => row);
+      const truncated = groups > data.length;
+      if (wantsLean(req.query)) return res.json({ success: true, truncated, data });
       res.json({
         success: true,
         count: data.length,
@@ -337,7 +350,7 @@ function handler(key) {
         rows_in_database: spec.rows,
         rows_matched: rowsMatched,
         groups_total: groups,
-        truncated: groups > data.length,
+        truncated,
         group_by: agg.groups,
         metrics: agg.metrics,
         data,
@@ -348,4 +361,4 @@ function handler(key) {
   };
 }
 
-module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation, related, selectClause, joins };
+module.exports = { TABLES, APEX_DB, listTables, handler, tableFilters, aggregation, organisation, related, selectClause, joins, wantsLean };

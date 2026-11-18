@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { TABLES, tableFilters, aggregation, organisation, related, selectClause, joins } = require('./apex-table-routes');
+const { TABLES, tableFilters, aggregation, organisation, related, selectClause, joins, wantsLean } = require('./apex-table-routes');
 
 test('from/to use the period key of tables without a date column', () => {
   const scorecard = tableFilters(TABLES['serving-executive-scorecard-monthly'], { from: '2025-10-01', to: '2026-09-30' }, {});
@@ -86,6 +86,15 @@ test('customer, vendor and offering names join in through their ids', () => {
   assert.doesNotMatch(picked.join, /dim_product_service/, 'only the joins the selected columns need');
   assert.ok(selectClause(sales, 'vendor_name').error, 'sales rows have no vendor');
   assert.equal(selectClause(TABLES['dim-customer'], 'customer_name').sql, 't.[customer_name]', 'own column, no join');
+});
+
+test('wantsLean reads the lean query flag', () => {
+  assert.equal(wantsLean({}), false, 'missing flag defaults to false (verbose)');
+  assert.equal(wantsLean({ lean: '' }), false, 'empty value stays verbose');
+  assert.equal(wantsLean({ lean: '0' }), false, '0 is not lean');
+  assert.equal(wantsLean({ lean: 'false' }), false, 'false is not lean');
+  assert.equal(wantsLean({ lean: '1' }), true, '1 opts in');
+  assert.equal(wantsLean({ lean: 'true' }), true, 'true opts in');
 });
 
 test('a dimension is joined once however many filters and groups need it', () => {

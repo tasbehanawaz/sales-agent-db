@@ -113,7 +113,7 @@ function buildTools() {
       additionalProperties: { type: ['string', 'integer', 'number'] },
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
-  });
+  }, runApexTable);
   add('apex_chart', `${APEX_TABLE_PREFIX}{table}`, {
     name: 'apex_chart',
     title: 'Draw a chart of an Apex table',
@@ -192,6 +192,15 @@ async function callTool(name, rawArgs, ctx) {
 
 async function runEndpoint(tool, args, ctx) {
   const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, args) });
+  return { isError: status >= 400, text: body };
+}
+
+// apex_table always asks the REST endpoint for the lean envelope (no count,
+// table, rows_in_database, group_by, metrics). The agent never reads those
+// fields, and leaving them out shrinks every tool reply the agent carries in
+// context on the next round. See TOKEN_COST_OPTIMIZATION.md item 2.
+async function runApexTable(tool, args, ctx) {
+  const { status, body } = await loopback({ ...ctx, path: requestPath(tool.route, { ...args, lean: 1 }) });
   return { isError: status >= 400, text: body };
 }
 
